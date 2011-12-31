@@ -15,35 +15,47 @@ package org.mempool
  *  
  *  The representation type of the objects can be specified.
  */
-trait Allocator[DisposableVariant <: Disposable] {
+abstract class Allocator[R] {
   
   /** Allocates disposable objects.
    */
-  def allocate[T <: DisposableVariant: ClassManifest](): T
+  def allocate(): R
+  
+  /** Disposes a previously allocated object.
+   *  
+   *  Unless specified differently by the allocater implementation,
+   *  the object to be disposed has to be previously allocated by
+   *  the same allocator.
+   */
+  def dispose(obj: R): Unit
   
 }
 
 
 object Allocator {
   
-  def heap[Repr <: Disposable: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = new Allocator[Repr] {
-    def allocate[T <: Repr: ClassManifest](): T =
-      if (implicitly[ClassManifest[T]] == implicitly[ClassManifest[Repr]]) {
-        val r = ctor.asInstanceOf[T]
+  def heap[Repr: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = new Allocator[Repr] {
+    def allocate(): Repr =
+      if (implicitly[ClassManifest[Repr]] == implicitly[ClassManifest[Repr]]) {
+        val r = ctor.asInstanceOf[Repr]
         init(r)
         r
       } else illegalarg("This allocator can only allocate objects of type: " + implicitly[ClassManifest[Repr]])
+    def dispose(obj: Repr) { /* do absolutely nothing */ }
   }
   
-  def singleThreadUnlimitedPool[Repr <: Reclaimable: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
-    val mempool = MemoryPool.singleThread
-    mempool.register(ctor)(init)
+  def singleThreadUnlimitedPool[Repr: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
+    val mempool = new singlethread.UnlimitedPool[Repr](ctor)(init)
     mempool
   }
   
-  def singleThreadFixedPool[Repr <: Reclaimable: ClassManifest](capacity: Int)(ctor: =>Repr)(init: Repr => Unit) = {
-    val mempool = MemoryPool.singleThreadFixed(capacity)
-    mempool.register(ctor)(init)
+  def singleThreadFixedPool[Repr: ClassManifest](capacity: Int)(ctor: =>Repr)(init: Repr => Unit) = {
+    val mempool = new singlethread.FixedPool[Repr](capacity)(ctor)(init)
+    mempool
+  }
+  
+  def singleThreadFreeList[Repr <: singlethread.Linkable[Repr]: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
+    val mempool = new singlethread.FreeList[Repr](ctor)(init)
     mempool
   }
   

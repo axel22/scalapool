@@ -21,15 +21,11 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
     length <- choose(0, 1000)
   } yield 0 until length
   
-  class Node(var x: Int) extends Reclaimable
+  class Node(var x: Int) extends singlethread.Ownable[Node] with singlethread.Linkable[Node]
   
-  def testAllocate(range: Range, pool: MemoryPool) = {
-    pool.register(new Node(-1)) {
-      _.x = 0
-    }
-    
+  def testAllocate(range: Range, pool: MemoryPool[Node]) = {
     val nodes = for (n <- range) yield {
-      val node = pool.allocate[Node]
+      val node = pool.allocate()
       node.x = n
       node
     }
@@ -39,41 +35,57 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
     } :| "nodes have growing `x`: %s"
   }
   
-  property("SingleThreadUnlimitedPool.allocate") = forAll (ranges) {
+  property("singlethread.UnlimitedPool.allocate") = forAll (ranges) {
     range =>
-    val pool = new SingleThreadUnlimitedPool
+    val pool = Allocator.singleThreadUnlimitedPool(new Node(-1)) {
+      _.x = 0
+    }
     testAllocate(range, pool)
   }
   
-  property("SingleThreadFixedPool.allocate") = forAll (ranges, choose(0, 8)) {
+  property("singlethread.FixedPool.allocate") = forAll (ranges, choose(0, 8)) {
     (range, capacity) =>
-    val pool = new SingleThreadFixedPool(capacity)
+    val pool = Allocator.singleThreadFixedPool(capacity)(new Node(-1)) {
+      _.x = 0
+    }
     testAllocate(range, pool)
   }
   
-  def testReclaim(range: Range, pool: MemoryPool): Prop = {
-    pool.register(new Node(-1)) { _.x = 0 }
-    
+  property("singlethread.FreeList.allocate") = forAll (ranges, choose(0, 8)) {
+    (range, capacity) =>
+    val pool = Allocator.singleThreadFreeList(new Node(-1)) {
+      _.x = 0
+    }
+    testAllocate(range, pool)
+  }
+  
+  def testReclaim(range: Range, pool: MemoryPool[Node]): Prop = {
     for (n <- range) {
-      val node = pool.allocate[Node]
+      val node = pool.allocate()
       node.x = n
       node.dispose()
     }
     
-    val nodes = for (n <- range) yield pool.allocate[Node]
+    val nodes = for (n <- range) yield pool.allocate()
     
     nodes.forall(_.x == 0)
   }
   
-  property("SingleThreadUnlimitedPool.reclaim") = forAll (ranges) {
+  property("singlethread.UnlimitedPool.reclaim") = forAll (ranges) {
     range =>
-    val pool = new SingleThreadUnlimitedPool
+    val pool = Allocator.singleThreadUnlimitedPool(new Node(-1)) { _.x = 0 }
     testReclaim(range, pool)
   }
   
-  property("SingleThreadFixedPool.reclaim") = forAll (ranges, choose(0, 8)) {
+  property("singlethread.FixedPool.reclaim") = forAll (ranges, choose(0, 8)) {
     (range, capacity) =>
-    val pool = new SingleThreadFixedPool(capacity)
+    val pool = Allocator.singleThreadFixedPool(capacity)(new Node(-1)) { _.x = 0 }
+    testReclaim(range, pool)
+  }
+  
+  property("singlethread.FreeList.reclaim") = forAll (ranges, choose(0, 8)) {
+    (range, capacity) =>
+    val pool = Allocator.singleThreadFreeList(new Node(-1)) { _.x = 0 }
     testReclaim(range, pool)
   }
   

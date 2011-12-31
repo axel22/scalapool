@@ -12,12 +12,11 @@ import annotation.unchecked._
 
 
 
-/** Used to create reclaimable objects of a certain type.
+/** Used to create reclaimable objects of a certain type, and from different threads.
  *  
- *  The memory pool allocates objects from its internal storage or by
- *  allocating additional memory, as needed.
+ *  Pools of this type can allocate and dispose objects in a thread-safe manner.
  */
-trait MemoryPool[R] extends Allocator[R] {
+trait ConcurrentMemoryPool[R] extends Allocator[R] {
   /** Allocates an object */
   def allocate(): R
   
@@ -26,7 +25,7 @@ trait MemoryPool[R] extends Allocator[R] {
 }
 
 
-object MemoryPool {
+object ConcurrentMemoryPool {
   
 }
 

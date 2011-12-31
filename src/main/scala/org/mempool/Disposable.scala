@@ -12,7 +12,7 @@ package org.mempool
 
 
 /** Describes objects which can be disposed. */
-trait Disposable {
+trait Disposable[+R <: Disposable[R]] {
 
   /** Optionally disposes this object.
    *  
@@ -24,6 +24,11 @@ trait Disposable {
    *  If the implementation of the object does not dispose, the object
    *  will still be collected by the GC. This allows for opportunistic
    *  manual memory management, while ensuring correctness.
+   *  
+   *  Clients that want to extend this interface to create disposable
+   *  objects should implement this method by forwarding the call to
+   *  the memory pool that creates the object. Typically, this is a
+   *  global memory pool.
    */
   def dispose(): Unit
   

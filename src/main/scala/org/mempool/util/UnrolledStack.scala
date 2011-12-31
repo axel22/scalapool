@@ -17,7 +17,7 @@ package util
 class UnrolledStack[T: ClassManifest] extends Stack[T] {
   import UnrolledStack.Node
   
-  val allocator: Allocator[Reclaimable] = Allocator.singleThreadFixedPool(4)(new UnrolledStack.Node[T](null)) { _.prev = null }
+  val allocator: Allocator[Node[T]] = Allocator.singleThreadFixedPool(4)(new Node[T](null)) { _.prev = null }
   var stacklet = new Node(null)
   
   def push(x: T) = stacklet = stacklet.push(x, this)
@@ -42,7 +42,7 @@ object UnrolledStack {
   
   val NODESIZE = 64
   
-  final class Node[T: ClassManifest](var prev: Node[T]) extends Reclaimable {
+  final class Node[T: ClassManifest](var prev: Node[T]) {
     val array = new Array[T](NODESIZE)
     var front = 0
     
@@ -55,7 +55,7 @@ object UnrolledStack {
       front += 1
       this
     } else {
-      val n = us.allocator.allocate[Node[T]]()
+      val n = us.allocator.allocate()
       n.prev = this
       n.push(x, us)
     }
@@ -67,7 +67,7 @@ object UnrolledStack {
       elem
     } else {
       us.stacklet = prev
-      this.dispose()
+      us.allocator.dispose(this)
       prev.pop(us)
     }
     
