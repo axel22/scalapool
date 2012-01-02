@@ -23,12 +23,16 @@ trait MemoryPool[R] extends Allocator[R] {
   
   /** Reclaims the object. Called internally by `dispose`. */
   def dispose(r: R @uncheckedVariance): Unit
-}
-
-
-object MemoryPool {
   
+  def assignPool(obj: R) {
+    import singlethread.Poolable
+    if (obj.isInstanceOf[Poolable[_]])
+      obj.asInstanceOf[Poolable[Nothing]].memoryPool = this.asInstanceOf[MemoryPool[Nothing]]
+  }
 }
+
+
+object MemoryPool
 
 
 

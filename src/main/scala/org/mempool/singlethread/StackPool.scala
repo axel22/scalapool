@@ -29,8 +29,7 @@ extends MemoryPool[R] {
   def allocate(): R = {
     val obj = if (pool.nonEmpty) pool.pop() else ctor
     init(obj)
-    if (obj.isInstanceOf[Ownable[_]])
-      obj.asInstanceOf[Ownable[Nothing]].memoryPool = this.asInstanceOf[MemoryPool[Nothing]]
+    assignPool(obj)
     obj.asInstanceOf[R]
     // could try-catch and illegalarg("Object type %s not registered with the pool.".format(manifest))
   }

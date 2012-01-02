@@ -4,23 +4,16 @@
 ** /_/  /_/ \__/_/_/_/ .__|___|___/_/     github.com/axel22/mempool **
 \*                  /_/                   (c) 2011-2012             */
 
-package org.mempool
+package org.mempool.concurrent;
 
 
 
-import annotation.unchecked._
+import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 
 
-/** Used to create reclaimable objects of a certain type concurrently.
- *  
- *  Pools of this type can allocate and dispose objects in a thread-safe manner.
- */
-trait ConcurrentMemoryPool[R] extends Allocator[R]
-
-
-object ConcurrentMemoryPool
-
-
-
-
+public class JRef<R extends JReferable > {
+    public static AtomicReferenceFieldUpdater<JRef, JReferable> updater = AtomicReferenceFieldUpdater.newUpdater(JRef.class, JReferable.class, "rawref");
+    
+    protected volatile R rawref;
+}

@@ -12,15 +12,20 @@ import annotation.unchecked._
 
 
 
-/** Used to create reclaimable objects of a certain type concurrently.
- *  
- *  Pools of this type can allocate and dispose objects in a thread-safe manner.
- */
-trait ConcurrentMemoryPool[R] extends Allocator[R]
-
-
-object ConcurrentMemoryPool
-
+package object concurrent {
+  @inline def acquire[R <: Referable[R]](obtain: =>R): R = {
+    var loop = true
+    var r: R = null.asInstanceOf[R]
+    do { 
+      r = obtain
+      if (r.check(r.acquire(), obtain)) loop = false
+    } while (loop)
+    
+    r
+  }
+  
+  @inline def release[R <: Referable[R]](r: R) = r.release()
+}
 
 
 
