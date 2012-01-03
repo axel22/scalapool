@@ -52,7 +52,7 @@ import annotation.{tailrec, switch}
  *  release(r)
  *  }}}
  *  
- *  A block-style acquire is also possible:
+ *  A block-style acquire is also possible using the `acquiring` block:
  *  
  *  {{{
  *  acquiring(obtainReference()) {

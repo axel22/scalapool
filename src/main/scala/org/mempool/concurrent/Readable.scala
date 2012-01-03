@@ -33,6 +33,9 @@ import annotation.{tailrec, switch}
  *  the stamp is even. If the stamp changes between the start and the end of
  *  the read, that means that the read has to be repeated - somebody must have
  *  recycled the object.
+ *  
+ *  The `reading` block must not fail with an exception due to reading a
+ *  `Readable` object in an inconsistent state.
  */
 abstract class Readable[R <: Readable[R]] extends Poolable[R] {
   @volatile

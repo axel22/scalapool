@@ -39,8 +39,10 @@ package object concurrent {
     do {
       val r = obtain
       val stamp = r.stamp
-      body(r)
-      if (r.stamp == stamp) loop = false
+      if (stamp % 2 == 0) {
+        t = body(r)
+        if (r.stamp == stamp) loop = false
+      }
     } while (loop)
     
     t
