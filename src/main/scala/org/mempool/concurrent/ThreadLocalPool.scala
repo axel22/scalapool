@@ -17,6 +17,12 @@ import annotation.unchecked._
  *  
  *  This memory pool allows allocating an object on one thread, and disposing it by a different thread.
  *  Publication of allocated objects is still the clients responsibility.
+ *  
+ *  Useful when each thread allocates and disposes objects relatively independently - each thread
+ *  has its own local memory pool and objects are not shared between these pools.
+ *  In the situation where a producer thread constantly allocates objects and a consumer thread disposes them,
+ *  an out of memory error will happen eventually, since the consumer pool will be filled and those objects
+ *  never used up.
  */
 class ThreadLocalPool[R](memoryPoolFactory: () => MemoryPool[R]) extends ConcurrentMemoryPool[R] {
   val localPool = new ThreadLocal[MemoryPool[R]] {
