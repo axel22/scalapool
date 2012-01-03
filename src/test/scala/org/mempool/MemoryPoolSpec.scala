@@ -37,7 +37,7 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
   
   property("singlethread.UnlimitedPool.allocate") = forAll (ranges) {
     range =>
-    val pool = Allocator.singleThreadUnlimitedPool(new Node(-1)) {
+    val pool = Allocator.singleThread.unlimitedPool(new Node(-1)) {
       _.x = 0
     }
     testAllocate(range, pool)
@@ -45,7 +45,15 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
   
   property("singlethread.FixedPool.allocate") = forAll (ranges, choose(0, 8)) {
     (range, capacity) =>
-    val pool = Allocator.singleThreadFixedPool(capacity)(new Node(-1)) {
+    val pool = Allocator.singleThread.fixedPool(capacity)(new Node(-1)) {
+      _.x = 0
+    }
+    testAllocate(range, pool)
+  }
+  
+  property("singlethread.GrowingPool.allocate") = forAll (ranges, choose(0, 8)) {
+    (range, capacity) =>
+    val pool = Allocator.singleThread.growingPool(new Node(-1)) {
       _.x = 0
     }
     testAllocate(range, pool)
@@ -53,7 +61,7 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
   
   property("singlethread.FreeList.allocate") = forAll (ranges, choose(0, 8)) {
     (range, capacity) =>
-    val pool = Allocator.singleThreadFreeList(new Node(-1)) {
+    val pool = Allocator.singleThread.freeList(new Node(-1)) {
       _.x = 0
     }
     testAllocate(range, pool)
@@ -73,19 +81,25 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
   
   property("singlethread.UnlimitedPool.dispose") = forAll (ranges) {
     range =>
-    val pool = Allocator.singleThreadUnlimitedPool(new Node(-1)) { _.x = 0 }
+    val pool = Allocator.singleThread.unlimitedPool(new Node(-1)) { _.x = 0 }
     testDispose(range, pool)
   }
   
   property("singlethread.FixedPool.dispose") = forAll (ranges, choose(0, 8)) {
     (range, capacity) =>
-    val pool = Allocator.singleThreadFixedPool(capacity)(new Node(-1)) { _.x = 0 }
+    val pool = Allocator.singleThread.fixedPool(capacity)(new Node(-1)) { _.x = 0 }
+    testDispose(range, pool)
+  }
+  
+  property("singlethread.GrowingPool.dispose") = forAll (ranges, choose(0, 8)) {
+    (range, capacity) =>
+    val pool = Allocator.singleThread.growingPool(new Node(-1)) { _.x = 0 }
     testDispose(range, pool)
   }
   
   property("singlethread.FreeList.dispose") = forAll (ranges, choose(0, 8)) {
     (range, capacity) =>
-    val pool = Allocator.singleThreadFreeList(new Node(-1)) { _.x = 0 }
+    val pool = Allocator.singleThread.freeList(new Node(-1)) { _.x = 0 }
     testDispose(range, pool)
   }
   

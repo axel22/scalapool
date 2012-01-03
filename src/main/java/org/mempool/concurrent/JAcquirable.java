@@ -12,8 +12,8 @@ import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 
 
 
-public class JReferable {
-    public static AtomicIntegerFieldUpdater<JReferable> updater = AtomicIntegerFieldUpdater.newUpdater(JReferable.class, "refcount");
+public class JAcquirable {
+    public static AtomicIntegerFieldUpdater<JAcquirable> updater = AtomicIntegerFieldUpdater.newUpdater(JAcquirable.class, "refcount");
     
     protected volatile int refcount = 0;
 }

@@ -17,7 +17,7 @@ package util
 class UnrolledStack[T: ClassManifest] extends Stack[T] {
   import UnrolledStack.Node
   
-  val allocator: Allocator[Node[T]] = Allocator.singleThreadFixedPool(4)(new Node[T](null)) { _.prev = null }
+  val allocator: Allocator[Node[T]] = Allocator.singleThread.fixedPool(16)(new Node[T](null)) { _.prev = null }
   var stacklet = new Node(null)
   
   def push(x: T) = stacklet = stacklet.push(x, this)

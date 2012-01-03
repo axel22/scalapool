@@ -12,8 +12,8 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 
 
-public class JRef<R extends JReferable > {
-    public static AtomicReferenceFieldUpdater<JRef, JReferable> updater = AtomicReferenceFieldUpdater.newUpdater(JRef.class, JReferable.class, "rawref");
+public class JRef<R extends JAcquirable > {
+    public static AtomicReferenceFieldUpdater<JRef, JAcquirable> updater = AtomicReferenceFieldUpdater.newUpdater(JRef.class, JAcquirable.class, "rawref");
     
     protected volatile R rawref;
 }

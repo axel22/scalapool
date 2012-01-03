@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater
 
 
 
-/** `Ref`s can reference concurrently referable objects.
+/** `Ref`s can reference concurrently acquirable objects.
  *  
  *  Using concurrent `Ref`s carries a price in the form of
  *  an indirection.
@@ -23,14 +23,14 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater
  *  Here is a use-case example:
  *  
  *  {{{
- *  class Node extends Referable[Node]
- *  val r1 = new Ref[Node](new Node) // refers to a node
- *  val r2 = new Ref[Node]           // refers to nothing
+ *  class Node extends Acquirable[Node]
+ *  val r1 = Ref[Node](new Node) // refers to a node
+ *  val r2 = Ref[Node]           // refers to nothing
  *  r2 << r1
  *  // now both refer to the same node
  *  }}}
  *  
- *  It is also possible to assign referable objects to a `Ref`.
+ *  It is also possible to assign acquirable objects to a `Ref`.
  *  Since the `:=` is marked with `@inline`, this should not create extra objects.
  *  
  *  {{{
@@ -38,11 +38,11 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater
  *  r1 := new Node
  *  }}}
  */
-final class Ref[R <: Referable[R]](rawinit: R = null.asInstanceOf[R]) extends JRef[R] {
+final class Ref[R <: Acquirable[R]](rawinit: R = null.asInstanceOf[R]) extends JRef[R] {
   JRef.updater.set(this, rawinit)
   
   @tailrec
-  @implicitNotFound(msg = "This is a private method.")
+  @implicitNotFound(msg = "This is a private method and cannot be called.")
   def reassign(nv: R)(implicit privatemethod: Nothing) {
     val ov = /*READ*/rawref
     if (JRef.updater.compareAndSet(this, ov, nv)) if (ov ne null) release(ov)
@@ -69,7 +69,7 @@ final class Ref[R <: Referable[R]](rawinit: R = null.asInstanceOf[R]) extends JR
 
 
 object Ref {
-  def apply[R <: Referable[R]](rawinit: R) = new Ref(rawinit)
+  def apply[R <: Acquirable[R]](rawinit: R) = new Ref(rawinit)
 }
 
 

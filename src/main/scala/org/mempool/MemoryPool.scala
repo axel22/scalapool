@@ -18,13 +18,7 @@ import annotation.unchecked._
  *  allocating additional memory, as needed.
  */
 trait MemoryPool[R] extends Allocator[R] {
-  /** Allocates an object */
-  def allocate(): R
-  
-  /** Reclaims the object. Called internally by `dispose`. */
-  def dispose(r: R @uncheckedVariance): Unit
-  
-  def assignPool(obj: R) {
+  protected def specialInitialize(obj: R) {
     import singlethread.Poolable
     if (obj.isInstanceOf[Poolable[_]])
       obj.asInstanceOf[Poolable[Nothing]].memoryPool = this.asInstanceOf[MemoryPool[Nothing]]

@@ -32,7 +32,7 @@ class FreeList[R <: Linkable[R]](ctor: =>R)(init: R => Unit) extends MemoryPool[
       result
     }
     init(obj)
-    assignPool(obj)
+    specialInitialize(obj)
     obj
   }
   

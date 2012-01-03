@@ -14,8 +14,10 @@ import annotation.{tailrec, switch}
 
 
 
-/** Describes objects which can be referred to concurrently, and have their
+/** Describes objects which can be acquired concurrently, and have their
  *  `dispose` effects postponed until the reference to the object is lost.
+ *  Acquired objects can be safely side-effected - their fields can be written
+ *  and side-effects can be done based on the values of the fields.
  *  
  *  While this assumes a certain amount of discipline on the programmer's part,
  *  it ensures that an object referenced by a thread is not recycled by some
@@ -24,7 +26,7 @@ import annotation.{tailrec, switch}
  *  Here is a use-case example.
  *  
  *  Assume there is a method `obtainReference()` which returns a reference
- *  to a concurrently referable object. This method is not side-effecting.
+ *  to a concurrently acuirable object. This method is not side-effecting.
  *  Before using the object, it has to be acquired. After obtaining the reference,
  *  and before acquiring it there is a possibility that some other thread disposes
  *  the reference (and then even reallocates it).
@@ -50,6 +52,14 @@ import annotation.{tailrec, switch}
  *  release(r)
  *  }}}
  *  
+ *  A block-style acquire is also possible:
+ *  
+ *  {{{
+ *  acquiring(obtainReference()) {
+ *    r => doWork(r)
+ *  }
+ *  }}}
+ *  
  *  These constructs are marked with the `@inline` annotation,
  *  so no closure is allocated for these objects provided that
  *  the `-Yinline` compiler option is used.
@@ -62,15 +72,13 @@ import annotation.{tailrec, switch}
  *  calls `dispose` in the meanwhile, the object will not be disposed until
  *  all the threads that called `acquire` call `release` on the object.
  *  
- *  To overcome the programmatic overhead of using referable objects directly,
+ *  To overcome the programmatic overhead of using acquirable objects directly,
  *  and being obliged to call `acquire` and `release` manually,
- *  `Ref` objects can be used to refer to referable objects.
+ *  `Ref` objects can be used to refer to acquirable objects.
  */
-abstract class Referable[R <: Referable[R]] extends JReferable with Disposable[R] {
-  import Referable._
-  import JReferable._
-  
-  private[mempool] var memoryPool: ConcurrentMemoryPool[R] = _
+abstract class Acquirable[R <: Acquirable[R]] extends JAcquirable with Poolable[R] {
+  import Acquirable._
+  import JAcquirable._
   
   /* States:
    * 00 - disposed
@@ -88,7 +96,7 @@ abstract class Referable[R <: Referable[R]] extends JReferable with Disposable[R
   
   /** Called by the pool on reallocation.
    */
-  /*private[mempool]*/ def reallocate() {
+  private[mempool] def reallocateInit() {
     @tailrec def tryAllocate() {
       val rc = /*READ*/refcount
       if (rc == 0x00000000) {
@@ -163,10 +171,10 @@ abstract class Referable[R <: Referable[R]] extends JReferable with Disposable[R
   }
   
   private def disposeToMemoryPool() {
-    memoryPool.dispose(repr)
+    if (memoryPool ne null) memoryPool.dispose(repr)
   }
   
-  def dispose() {
+  final override def dispose() {
     @tailrec def tryPrepare(): Boolean = {
       val rc = /*READ*/refcount
       (rc & statemask: @switch) match {
@@ -186,7 +194,7 @@ abstract class Referable[R <: Referable[R]] extends JReferable with Disposable[R
 }
 
 
-object Referable {
+object Acquirable {
   private[mempool] val statemask = 0xc0000000
   private[mempool] val countmask = 0x3fffffff
 }
