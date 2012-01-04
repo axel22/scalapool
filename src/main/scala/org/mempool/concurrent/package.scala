@@ -16,9 +16,11 @@ package object concurrent {
   @inline def acquire[R <: Acquirable[R]](obtain: =>R): R = {
     var loop = true
     var r: R = null.asInstanceOf[R]
-    do { 
+    do {
       r = obtain
-      if (r.check(r.acquire(), obtain)) loop = false
+      if (r ne null) {
+        if (r.check(r.acquire(), obtain)) loop = false
+      } else loop = false
     } while (loop)
     
     r
@@ -38,10 +40,15 @@ package object concurrent {
     var t: T = null.asInstanceOf[T]
     do {
       val r = obtain
-      val stamp = r.stamp
-      if (stamp % 2 == 0) {
+      if (r ne null) {
+        val stamp = r.stamp
+        if (stamp % 2 == 0) {
+          t = body(r)
+          if (r.stamp == stamp) loop = false
+        }
+      } else {
         t = body(r)
-        if (r.stamp == stamp) loop = false
+        loop = false
       }
     } while (loop)
     

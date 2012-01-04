@@ -94,6 +94,8 @@ abstract class Acquirable[R <: Acquirable[R]] extends JAcquirable with Poolable[
   
   def repr = this.asInstanceOf[R]
   
+  reallocateInit()
+  
   /** Called by the pool on reallocation.
    */
   private[mempool] def reallocateInit() {
@@ -105,7 +107,8 @@ abstract class Acquirable[R <: Acquirable[R]] extends JAcquirable with Poolable[
       } else ??? // if reallocating, the state has to be 00
     }
     
-    tryAllocate()
+    if (/*READ*/refcount == 0x40000000) {} // do nothing - normal ctor
+    else tryAllocate()
   }
   
   /** Acquires the object, returning a boolean indicating if the
