@@ -38,15 +38,18 @@ import java.util.concurrent.atomic.AtomicReferenceFieldUpdater
  *  r1 := new Node
  *  }}}
  */
-final class Ref[R <: Acquirable[R]](rawinit: R = null.asInstanceOf[R]) extends JRef[R] {
-  JRef.updater.set(this, rawinit)
+final class Ref[R <: Acquirable[R]](rawinit: =>R) extends JRef[R] {
+  this := rawinit
+  
+  def this() = this(null.asInstanceOf[R])
   
   @tailrec
-  @implicitNotFound(msg = "This is a private method and cannot be called.")
+  @implicitNotFound(msg = "This is a private method.")
   def reassign(nv: R)(implicit privatemethod: Nothing) {
     val ov = /*READ*/rawref
-    if (JRef.updater.compareAndSet(this, ov, nv)) if (ov ne null) release(ov)
-    else reassign(nv)
+    if (JRef.updater.compareAndSet(this, ov, nv)) {
+      if (ov ne null) release(ov)
+    } else reassign(nv)
   }
   
   def apply(): R = rawref
@@ -69,7 +72,8 @@ final class Ref[R <: Acquirable[R]](rawinit: R = null.asInstanceOf[R]) extends J
 
 
 object Ref {
-  def apply[R <: Acquirable[R]](rawinit: R) = new Ref(rawinit)
+  @inline def apply[R <: Acquirable[R]](rawinit: =>R) = new Ref(rawinit)
+  @inline def apply[R <: Acquirable[R]]() = new Ref[R]()
 }
 
 

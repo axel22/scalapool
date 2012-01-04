@@ -11,11 +11,11 @@ package org.mempool
 import org.scalacheck._
 import Prop._
 import Gen._
-import concurrent.acquiring
+import concurrent.Ref
 
 
 
-object AcquiringSpec extends Properties("Acquirable") {
+object RefSpec extends Properties("Ref") {
   
   def ranges = for {
     length <- choose(0, 1000)
@@ -31,52 +31,50 @@ object AcquiringSpec extends Properties("Acquirable") {
       node
     }
     
-    @volatile var loop = true
-    val nullnode = new Node(0, 0)
-    @volatile var current: Node = nullnode
+    val current = Ref[Node]()
+    val zeronode = new Node(0, 0)
     
     val t = new Thread {
       override def run() {
-        for (n <- nodes) {
-          current = n
-          current = nullnode
-          n.dispose()
-          current = pool.allocate()
+        try {
+          /*
+          for (n <- nodes) {
+            current := n
+            current := null
+            n.dispose()
+            val ncurrent = pool.allocate()
+            current := ncurrent
+          }
+          */
+        } catch {
+          case e => e.printStackTrace()
+        } finally {
+          current := zeronode
         }
-        loop = false
       }
     }
+    
     t.start()
-    
-    while (loop) {
-      val (x, y) = acquiring(current) {
-        n =>
-        n.x = n.y
-        (n.x, n.y)
-      }
-      assert(x == y, x + ", " + y)
+    while (current() ne zeronode) {
+      val n = current()
+      assert((n eq null) || n.x == -n.y, n.x + ", " + n.y)
     }
-    
     t.join()
     
-    true :| "acquiring"
+    true
   }
   
-  property("concurrent.acquiring") = forAll (ranges) {
+  property("<<") = forAll (ranges) {
     range =>
     val pool = Allocator.concurrent.threadLocalPool {
       Allocator.singleThread.unlimitedPool(new Node(-1, 1)) {
         n =>
-        n.x = 0
-        n.y = 0
+        n.x = -1
+        n.y = 1
       }
     }
-    try testAcquiring(range, pool)
-    catch {
-      case e =>
-        Console.err.println(e)
-        e.printStackTrace()
-        false :| "acquiring"
+    try { testAcquiring(range, pool) } catch {
+      case e => e.printStackTrace(); false
     }
   }
   
