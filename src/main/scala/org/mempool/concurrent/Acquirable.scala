@@ -26,7 +26,9 @@ import annotation.{tailrec, switch}
  *  Here is a use-case example.
  *  
  *  Assume there is a method `obtainReference()` which returns a reference
- *  to a concurrently acuirable object. This method is not side-effecting.
+ *  to a concurrently acuirable object. This method is not side-effecting,
+ *  and returns the same reference if called twice, provided that a 3rd thread
+ *  has not done any writes.
  *  Before using the object, it has to be acquired. After obtaining the reference,
  *  and before acquiring it there is a possibility that some other thread disposes
  *  the reference (and then even reallocates it).
@@ -71,10 +73,6 @@ import annotation.{tailrec, switch}
  *  What the `acquire`/`release` pair ensures is that even if another thread
  *  calls `dispose` in the meanwhile, the object will not be disposed until
  *  all the threads that called `acquire` call `release` on the object.
- *  
- *  To overcome the programmatic overhead of using acquirable objects directly,
- *  and being obliged to call `acquire` and `release` manually,
- *  `Ref` objects can be used to refer to acquirable objects.
  */
 abstract class Acquirable[R <: Acquirable[R]] extends JAcquirable with Poolable[R] {
   import Acquirable._

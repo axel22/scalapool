@@ -28,7 +28,9 @@ trait ConcurrentMemoryPool[R] extends Allocator[R] {
       obj.asInstanceOf[Acquirable[Nothing]].reallocateInit()
     }
     if (obj.isInstanceOf[Readable[_]]) {
-      obj.asInstanceOf[Readable[_]].incrementStamp()
+      val readable = obj.asInstanceOf[Readable[_]]
+      // this check because some nodes are allocated on the heap
+      if (readable.stamp % 2 != 0) readable.incrementStamp()
     }
   }
 }

@@ -37,13 +37,18 @@ object ReadableSpec extends Properties("Readable") {
     
     val t = new Thread {
       override def run() {
-        for (n <- nodes) {
-          current = n
-          current = nullnode
-          n.dispose()
-          current = pool.allocate()
+        try {
+          for (n <- nodes) {
+            current = n
+            current = nullnode
+            n.dispose()
+            current = pool.allocate()
+          }
+        } catch {
+          case e => e.printStackTrace()
+        } finally {
+          loop = false
         }
-        loop = false
       }
     }
     t.start()
