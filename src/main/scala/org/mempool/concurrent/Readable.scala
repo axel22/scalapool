@@ -39,7 +39,7 @@ import annotation.{tailrec, switch}
  */
 abstract class Readable[R <: Readable[R]] extends Poolable[R] {
   @volatile
-  private var stampcount = -1L
+  private var stampcount = 0L
   
   private[mempool] def incrementStamp() {
     stampcount = stampcount + 1
