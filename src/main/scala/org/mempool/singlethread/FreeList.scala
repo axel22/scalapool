@@ -28,7 +28,7 @@ class FreeList[R <: Linkable[R]](ctor: =>R)(init: R => Unit) extends MemoryPool[
   def allocate(): R = {
     val obj = if (freelist eq null) ctor else {
       val result = freelist
-      freelist = freelist.next
+      freelist = freelist._linkable_next
       result
     }
     init(obj)
@@ -37,7 +37,7 @@ class FreeList[R <: Linkable[R]](ctor: =>R)(init: R => Unit) extends MemoryPool[
   }
   
   def dispose(obj: R) {
-    obj.next = freelist
+    obj._linkable_next = freelist
     freelist = obj
   }
   

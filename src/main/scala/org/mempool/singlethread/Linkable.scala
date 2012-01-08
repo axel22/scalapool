@@ -14,5 +14,5 @@ import annotation.unchecked._
 
 /** Describes objects which can be linked. */
 trait Linkable[+R <: Linkable[R]] {
-  private[mempool] var next: R @uncheckedVariance = _
+  private[mempool] var _linkable_next: R @uncheckedVariance = _
 }
