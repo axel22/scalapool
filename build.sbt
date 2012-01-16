@@ -1,5 +1,5 @@
 
-name := "mempool"
+name := "scalapool"
 
 version := "0.1"
 

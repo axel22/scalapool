@@ -6,3 +6,6 @@ target/
 # backup files
 *~
 *.*~
+
+# trash
+.history
