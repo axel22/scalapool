@@ -46,8 +46,8 @@ object Allocator {
   
   object singleThread {
     
-    def unlimitedPool[Repr >: Null <: AnyRef: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
-      val mempool = new singlethread.UnlimitedPool[Repr](ctor)(init)
+    def unrolledPool[Repr >: Null <: AnyRef: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
+      val mempool = new singlethread.UnrolledPool[Repr](ctor)(init)
       mempool
     }
     

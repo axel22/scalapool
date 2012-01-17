@@ -65,7 +65,7 @@ object AcquirableSpec extends Properties("Acquirable") {
   property("concurrent.acquiring") = forAll (ranges) {
     range =>
     val pool = Allocator.concurrent.threadLocalPool {
-      Allocator.singleThread.unlimitedPool(new Node(-1, 1)) {
+      Allocator.singleThread.unrolledPool(new Node(-1, 1)) {
         n =>
         n.x = 0
         n.y = 0

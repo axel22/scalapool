@@ -37,7 +37,7 @@ object ConcurrentMemoryPoolSpec extends Properties("ConcurrentMemoryPool") {
   property("concurrent.ThreadLocalPool.allocate") = forAll (ranges) {
     range =>
     val pool = Allocator.concurrent.threadLocalPool {
-      Allocator.singleThread.unlimitedPool(new Node(-1)) { _.x = 0 }
+      Allocator.singleThread.unrolledPool(new Node(-1)) { _.x = 0 }
     }
     testAllocate(range, pool)
   }
@@ -57,7 +57,7 @@ object ConcurrentMemoryPoolSpec extends Properties("ConcurrentMemoryPool") {
   property("concurrent.ThreadLocalPool.dispose") = forAll (ranges) {
     range =>
     val pool = Allocator.concurrent.threadLocalPool {
-      Allocator.singleThread.unlimitedPool(new Node(-1)) { _.x = 0 }
+      Allocator.singleThread.unrolledPool(new Node(-1)) { _.x = 0 }
     }
     testDispose(range, pool)
   }

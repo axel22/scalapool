@@ -47,6 +47,26 @@ object BasicHeap extends BenchConfig {
 }
 
 
+object BasicHeapAllocator extends BenchConfig {
+  
+  def run() {
+    val mempool = Allocator.heap(new Foo) {
+      _.x = 0
+    }
+    
+    var i = 0
+    val sz = size
+    while (i < sz) {
+      foo = mempool.allocate()
+      foo.x = 1
+      mempool.dispose(foo)
+      i += 1
+    }
+  }
+  
+}
+
+
 object BasicFreeList extends BenchConfig {
   
   def run() {
@@ -67,10 +87,10 @@ object BasicFreeList extends BenchConfig {
 }
 
 
-object BasicUnlimitedPool extends BenchConfig {
+object BasicUnrolledPool extends BenchConfig {
   
   def run() {
-    val mempool = Allocator.singleThread.unlimitedPool(new Foo) {
+    val mempool = Allocator.singleThread.unrolledPool(new Foo) {
       _.x = 0
     }
     

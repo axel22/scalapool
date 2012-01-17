@@ -34,9 +34,9 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
     } :| "nodes have growing `x`: %s"
   }
   
-  property("singlethread.UnlimitedPool.allocate") = forAll (ranges) {
+  property("singlethread.UnrolledPool.allocate") = forAll (ranges) {
     range =>
-    val pool = Allocator.singleThread.unlimitedPool(new Node(-1)) {
+    val pool = Allocator.singleThread.unrolledPool(new Node(-1)) {
       _.x = 0
     }
     testAllocate(range, pool)
@@ -78,9 +78,9 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
     nodes.forall(_.x == 0)
   }
   
-  property("singlethread.UnlimitedPool.dispose") = forAll (ranges) {
+  property("singlethread.UnrolledPool.dispose") = forAll (ranges) {
     range =>
-    val pool = Allocator.singleThread.unlimitedPool(new Node(-1)) { _.x = 0 }
+    val pool = Allocator.singleThread.unrolledPool(new Node(-1)) { _.x = 0 }
     testDispose(range, pool)
   }
   

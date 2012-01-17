@@ -46,7 +46,7 @@ extends MemoryPool[R] {
 
 /** A single thread memory pool generating a neglectible amount of garbage.
  */
-class UnlimitedPool[R >: Null <: AnyRef: ClassManifest](c: =>R)(i: R => Unit) extends StackPool[R](c)(i) {
+class UnrolledPool[R >: Null <: AnyRef: ClassManifest](c: =>R)(i: R => Unit) extends StackPool[R](c)(i) {
   val special = resolveInit(c)
   def newObjectStack = new UnrolledStack[R]
 }
