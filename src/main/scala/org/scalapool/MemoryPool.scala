@@ -17,12 +17,8 @@ import annotation.unchecked._
  *  The memory pool allocates objects from its internal storage or by
  *  allocating additional memory, as needed.
  */
-trait MemoryPool[R] extends Allocator[R] {
-  protected def specialInitialize(obj: R) {
-    import singlethread.Poolable
-    if (obj.isInstanceOf[Poolable[_]])
-      obj.asInstanceOf[Poolable[Nothing]]._memory_pool = this.asInstanceOf[MemoryPool[Nothing]]
-  }
+abstract class MemoryPool[R] extends Allocator[R] {
+  def special: SpecialInitializer[R]
 }
 
 

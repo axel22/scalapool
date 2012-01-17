@@ -47,22 +47,22 @@ object Allocator {
   object singleThread {
     
     def unlimitedPool[Repr: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
-      val mempool = new singlethread.UnlimitedPool[Repr](ctor)(init)
+      val mempool = new singlethread.UnlimitedPool[Repr](ctor)(init)(resolveInit(implicitly[ClassManifest[_]].erasure))
       mempool
     }
     
     def fixedPool[Repr: ClassManifest](capacity: Int)(ctor: =>Repr)(init: Repr => Unit) = {
-      val mempool = new singlethread.FixedPool[Repr](capacity)(ctor)(init)
+      val mempool = new singlethread.FixedPool[Repr](capacity)(ctor)(init)(resolveInit(implicitly[ClassManifest[_]].erasure))
       mempool
     }
     
     def growingPool[Repr: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
-      val mempool = new singlethread.GrowingPool[Repr](ctor)(init)
+      val mempool = new singlethread.GrowingPool[Repr](ctor)(init)(resolveInit(implicitly[ClassManifest[_]].erasure))
       mempool
     }
     
     def freeList[Repr <: singlethread.Linkable[Repr]: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
-      val mempool = new singlethread.FreeList[Repr](ctor)(init)
+      val mempool = new singlethread.FreeList[Repr](ctor)(init)(resolveInit(implicitly[ClassManifest[_]].erasure))
       mempool
     }
   }

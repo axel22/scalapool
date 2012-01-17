@@ -21,7 +21,8 @@ package singlethread
  *  but requires a special field in the objects and does not have memory-locality
  *  guarantees.
  */
-class FreeList[R <: Linkable[R]](ctor: =>R)(init: R => Unit) extends MemoryPool[R] {
+class FreeList[R <: Linkable[R]](ctor: =>R)(init: R => Unit)(val special: SpecialInitializer[R])
+extends MemoryPool[R] {
   
   private var freelist: R = _
   
@@ -32,7 +33,7 @@ class FreeList[R <: Linkable[R]](ctor: =>R)(init: R => Unit) extends MemoryPool[
       result
     }
     init(obj)
-    specialInitialize(obj)
+    special(obj)
     obj
   }
   

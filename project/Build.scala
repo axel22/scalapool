@@ -15,19 +15,27 @@ import java.io.File
 
 object ScalapoolBuild extends Build {
   
-  /* tasks */
+  /* tasks and settings */
   
   val benchTask = InputKey[Unit](
     "bench",
     "Runs a specified benchmark."
   ) <<= inputTask {
     (argTask: TaskKey[Seq[String]]) =>
-    (argTask, scalaInstance) map {
-      (args, scala) =>
-      val javacommand = "java -Xmx2048m -Xms2048m -server -cp %s".format(
-        scala.libraryJar
+      (argTask,
+       dependencyClasspath in Compile,
+       artifactPath in (Compile, packageBin),
+       artifactPath in (Test, packageBin),
+       packageBin in Compile,
+       packageBin in Test) map {
+      (args, dp, jar, testjar, pbc, pbt) =>
+      val javacommand = "java -verbose:gc -Xprof -Xmx512m -Xms512m -server -cp %s:%s:%s".format(
+        dp.map(_.data).mkString(":"),
+        jar,
+        testjar
       )
-      println(javacommand + " " + args.mkString(" "));
+      val comm = javacommand + " " + args.mkString(" ")
+      comm!
     }
   }
   

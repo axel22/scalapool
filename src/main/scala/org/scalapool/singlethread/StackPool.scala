@@ -29,7 +29,7 @@ extends MemoryPool[R] {
   def allocate(): R = {
     val obj = if (pool.nonEmpty) pool.pop() else ctor
     init(obj)
-    specialInitialize(obj)
+    special(obj)
     obj.asInstanceOf[R]
     // could try-catch and illegalarg("Object type %s not registered with the pool.".format(manifest))
   }
@@ -45,14 +45,14 @@ extends MemoryPool[R] {
 
 /** A single thread memory pool generating a neglectible amount of garbage.
  */
-class UnlimitedPool[R: ClassManifest](c: =>R)(i: R => Unit) extends StackPool[R](c)(i) {
+class UnlimitedPool[R: ClassManifest](c: =>R)(i: R => Unit)(val special: SpecialInitializer[R]) extends StackPool[R](c)(i) {
   def newObjectStack = new UnrolledStack[R]
 }
 
 
 /** A single thread memory pool generating garbage only if its capacity is exceeded.
  */
-class FixedPool[R: ClassManifest](capacity: Int)(c: =>R)(i: R => Unit) extends StackPool[R](c)(i) {
+class FixedPool[R: ClassManifest](capacity: Int)(c: =>R)(i: R => Unit)(val special: SpecialInitializer[R]) extends StackPool[R](c)(i) {
   def newObjectStack = new FixedStack[R](capacity)
 }
 
@@ -60,6 +60,6 @@ class FixedPool[R: ClassManifest](capacity: Int)(c: =>R)(i: R => Unit) extends S
 /** A single thread memory pool which can grow - it generates garbage as it grows. It is never shrinked,
  *  so eventually it stops generating garbage, but its memory usage is never reduced.
  */
-class GrowingPool[R: ClassManifest](c: =>R)(i: R => Unit) extends StackPool[R](c)(i) {
+class GrowingPool[R: ClassManifest](c: =>R)(i: R => Unit)(val special: SpecialInitializer[R]) extends StackPool[R](c)(i) {
   def newObjectStack = new GrowingStack[R]
 }

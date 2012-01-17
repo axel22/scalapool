@@ -9,6 +9,7 @@ package util
 
 
 
+import singlethread.Poolable
 
 
 
@@ -42,7 +43,7 @@ object UnrolledStack {
   
   val NODESIZE = 64
   
-  final class Node[T: ClassManifest](var prev: Node[T]) {
+  final class Node[T: ClassManifest](var prev: Node[T]) extends Poolable[Node[T]] {
     val array = new Array[T](NODESIZE)
     var front = 0
     

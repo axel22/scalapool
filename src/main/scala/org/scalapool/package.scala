@@ -8,16 +8,26 @@ package org
 
 
 
+import scalapool.singlethread.Poolable
 
 
 
 package object scalapool {
+  
+  /* misc types */
+  
+  trait SpecialInitializer[R] {
+    def apply(obj: R): Unit
+  }
+  
   
   /* helpers */
   
   def ??? = throw new UnsupportedOperationException
   
   def illegalarg(msg: String) = throw new IllegalArgumentException(msg)
+  
+  private[scalapool] def resolveInit[R](cls: Class[R]) = null
   
   
   /* combinators */
@@ -47,5 +57,7 @@ package object scalapool {
   }
   
 }
+
+
 
 
