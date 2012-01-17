@@ -13,7 +13,7 @@ import annotation.unchecked._
 
 
 package object concurrent {
-  @inline def acquire[R <: Acquirable[R]](obtain: =>R): R = {
+  @inline def acquire[R >: Null <: Acquirable[R]](obtain: =>R): R = {
     var loop = true
     var r: R = null.asInstanceOf[R]
     do {
@@ -26,16 +26,16 @@ package object concurrent {
     r
   }
   
-  @inline def release[R <: Acquirable[R]](r: R) = r.release()
+  @inline def release[R >: Null <: Acquirable[R]](r: R) = r.release()
   
-  @inline def acquiring[R <: Acquirable[R], T](obtain: =>R)(body: R => T): T = {
+  @inline def acquiring[R >: Null <: Acquirable[R], T](obtain: =>R)(body: R => T): T = {
     val r = acquire(obtain)
     val t = body(r)
     release(r)
     t
   }
   
-  @inline def reading[R <: Readable[R], T](obtain: =>R)(body: R => T): T = {
+  @inline def reading[R >: Null <: Readable[R], T](obtain: =>R)(body: R => T): T = {
     var loop = true
     var t: T = null.asInstanceOf[T]
     do {

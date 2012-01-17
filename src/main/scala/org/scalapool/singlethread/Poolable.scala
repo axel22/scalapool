@@ -16,7 +16,7 @@ import annotation.unchecked._
 /** Describes objects which can become owned by memory pools on creation.
  *  This allows disposing the object without a reference to a memory pool in the client code.
  */
-trait Poolable[+R <: Poolable[R]] extends Disposable[R] {
+trait Poolable[+R >: Null <: AnyRef] extends Disposable[R] {
   
   private[scalapool] var _memory_pool: MemoryPool[R @uncheckedVariance] = _
   

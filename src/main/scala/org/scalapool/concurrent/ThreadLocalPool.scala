@@ -24,7 +24,7 @@ import annotation.unchecked._
  *  an out of memory error will happen eventually, since the consumer pool will be filled and those objects
  *  never used up.
  */
-class ThreadLocalPool[R](memoryPoolFactory: () => MemoryPool[R]) extends ConcurrentMemoryPool[R] {
+class ThreadLocalPool[R >: Null <: AnyRef](memoryPoolFactory: () => MemoryPool[R]) extends ConcurrentMemoryPool[R] {
   val localPool = new ThreadLocal[MemoryPool[R]] {
     override def initialValue = memoryPoolFactory()
   }

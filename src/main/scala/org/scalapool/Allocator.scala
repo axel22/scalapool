@@ -15,7 +15,7 @@ package org.scalapool
  *  
  *  The representation type of the objects can be specified.
  */
-abstract class Allocator[R] {
+abstract class Allocator[R >: Null <: AnyRef] {
   
   /** Allocates disposable objects.
    */
@@ -34,7 +34,7 @@ abstract class Allocator[R] {
 
 object Allocator {
   
-  def heap[Repr: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = new Allocator[Repr] {
+  def heap[Repr >: Null <: AnyRef: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = new Allocator[Repr] {
     def allocate(): Repr =
       if (implicitly[ClassManifest[Repr]] == implicitly[ClassManifest[Repr]]) {
         val r = ctor.asInstanceOf[Repr]
@@ -46,23 +46,23 @@ object Allocator {
   
   object singleThread {
     
-    def unlimitedPool[Repr: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
-      val mempool = new singlethread.UnlimitedPool[Repr](ctor)(init)(resolveInit(implicitly[ClassManifest[_]].erasure))
+    def unlimitedPool[Repr >: Null <: AnyRef: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
+      val mempool = new singlethread.UnlimitedPool[Repr](ctor)(init)
       mempool
     }
     
-    def fixedPool[Repr: ClassManifest](capacity: Int)(ctor: =>Repr)(init: Repr => Unit) = {
-      val mempool = new singlethread.FixedPool[Repr](capacity)(ctor)(init)(resolveInit(implicitly[ClassManifest[_]].erasure))
+    def fixedPool[Repr >: Null <: AnyRef: ClassManifest](ctor: =>Repr)(capacity: Int)(init: Repr => Unit) = {
+      val mempool = new singlethread.FixedPool[Repr](capacity)(ctor)(init)
       mempool
     }
     
-    def growingPool[Repr: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
-      val mempool = new singlethread.GrowingPool[Repr](ctor)(init)(resolveInit(implicitly[ClassManifest[_]].erasure))
+    def growingPool[Repr >: Null <: AnyRef: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
+      val mempool = new singlethread.GrowingPool[Repr](ctor)(init)
       mempool
     }
     
-    def freeList[Repr <: singlethread.Linkable[Repr]: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
-      val mempool = new singlethread.FreeList[Repr](ctor)(init)(resolveInit(implicitly[ClassManifest[_]].erasure))
+    def freeList[Repr >: Null <: singlethread.Linkable[Repr]: ClassManifest](ctor: =>Repr)(init: Repr => Unit) = {
+      val mempool = new singlethread.FreeList[Repr](ctor)(init)
       mempool
     }
   }
@@ -70,7 +70,7 @@ object Allocator {
   object concurrent {
     import org.scalapool.concurrent._
     
-    def threadLocalPool[Repr: ClassManifest](memoryPoolFactory: =>MemoryPool[Repr]) = {
+    def threadLocalPool[Repr >: Null <: AnyRef: ClassManifest](memoryPoolFactory: =>MemoryPool[Repr]) = {
       new ThreadLocalPool(() => memoryPoolFactory)
     }
   }

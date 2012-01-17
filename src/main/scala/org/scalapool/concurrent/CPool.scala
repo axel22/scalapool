@@ -15,7 +15,7 @@ import annotation.unchecked._
 
 /** A concurrent memory pool.
  */
-class CPool[R] extends ConcurrentMemoryPool[R] {
+class CPool[R >: Null <: AnyRef] extends ConcurrentMemoryPool[R] {
   
   def allocate(): R = {
     null.asInstanceOf[R]

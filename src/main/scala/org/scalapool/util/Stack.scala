@@ -22,6 +22,7 @@ trait Stack[T] extends Traversable[T] {
   def isFull: Boolean
   
   def foreach[U](f: T => U): Unit
+  
 }
 
 

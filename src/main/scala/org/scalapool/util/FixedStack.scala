@@ -14,7 +14,7 @@ package util
 
 /** Fixed capacity stack.
  */
-class FixedStack[T: ClassManifest](val capacity: Int) extends Stack[T] {
+class FixedStack[T >: Null <: AnyRef: ClassManifest](val capacity: Int) extends Stack[T] {
   private var sz = 0
   private val array = new Array[T](capacity)
   
@@ -23,7 +23,7 @@ class FixedStack[T: ClassManifest](val capacity: Int) extends Stack[T] {
     sz += 1
   }
   
-  def pop() = {
+  def pop() = if (sz == 0) null else {
     val r = array(sz - 1)
     sz -= 1
     r

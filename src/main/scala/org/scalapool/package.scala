@@ -8,7 +8,6 @@ package org
 
 
 
-import scalapool.singlethread.Poolable
 
 
 
@@ -26,8 +25,6 @@ package object scalapool {
   def ??? = throw new UnsupportedOperationException
   
   def illegalarg(msg: String) = throw new IllegalArgumentException(msg)
-  
-  private[scalapool] def resolveInit[R](cls: Class[R]) = null
   
   
   /* combinators */

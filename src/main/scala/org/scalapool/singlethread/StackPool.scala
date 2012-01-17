@@ -19,7 +19,7 @@ import util._
  *  Stack-based pools allocate extra arrays for the stack, but have good cache locality.
  *  Pooled objects do not have to have any special housekeeping fields.
  */
-abstract class StackPool[R: ClassManifest](ctor: =>R)(init: R => Unit)
+abstract class StackPool[R >: Null <: AnyRef: ClassManifest](ctor: =>R)(init: R => Unit)
 extends MemoryPool[R] {
   def newObjectStack: Stack[R]
   
@@ -27,7 +27,8 @@ extends MemoryPool[R] {
   
   /** Allocates an object of the requested type. */
   def allocate(): R = {
-    val obj = if (pool.nonEmpty) pool.pop() else ctor
+    var obj = pool.pop()
+    if (obj eq null) obj = ctor
     init(obj)
     special(obj)
     obj.asInstanceOf[R]
@@ -45,14 +46,16 @@ extends MemoryPool[R] {
 
 /** A single thread memory pool generating a neglectible amount of garbage.
  */
-class UnlimitedPool[R: ClassManifest](c: =>R)(i: R => Unit)(val special: SpecialInitializer[R]) extends StackPool[R](c)(i) {
+class UnlimitedPool[R >: Null <: AnyRef: ClassManifest](c: =>R)(i: R => Unit) extends StackPool[R](c)(i) {
+  val special = resolveInit(c)
   def newObjectStack = new UnrolledStack[R]
 }
 
 
 /** A single thread memory pool generating garbage only if its capacity is exceeded.
  */
-class FixedPool[R: ClassManifest](capacity: Int)(c: =>R)(i: R => Unit)(val special: SpecialInitializer[R]) extends StackPool[R](c)(i) {
+class FixedPool[R >: Null <: AnyRef: ClassManifest](capacity: Int)(c: =>R)(i: R => Unit) extends StackPool[R](c)(i) {
+  val special = resolveInit(c)
   def newObjectStack = new FixedStack[R](capacity)
 }
 
@@ -60,6 +63,7 @@ class FixedPool[R: ClassManifest](capacity: Int)(c: =>R)(i: R => Unit)(val speci
 /** A single thread memory pool which can grow - it generates garbage as it grows. It is never shrinked,
  *  so eventually it stops generating garbage, but its memory usage is never reduced.
  */
-class GrowingPool[R: ClassManifest](c: =>R)(i: R => Unit)(val special: SpecialInitializer[R]) extends StackPool[R](c)(i) {
+class GrowingPool[R >: Null <: AnyRef: ClassManifest](c: =>R)(i: R => Unit) extends StackPool[R](c)(i) {
+  val special = resolveInit(c)
   def newObjectStack = new GrowingStack[R]
 }

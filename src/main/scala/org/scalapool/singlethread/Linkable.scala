@@ -12,7 +12,13 @@ import annotation.unchecked._
 
 
 
-/** Describes objects which can be linked. */
-trait Linkable[+R <: Linkable[R]] {
+/** Describes objects which can be linked.
+ *  
+ *  Linkable objects should extend this trait:
+ *  {{{
+ *  class Node extends Linkable[Node]
+ *  }}}
+ */
+trait Linkable[+R] {
   private[scalapool] var _linkable_next: R @uncheckedVariance = _
 }

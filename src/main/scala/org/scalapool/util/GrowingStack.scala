@@ -14,7 +14,7 @@ package util
 
 /** Growing capacity stack.
  */
-class GrowingStack[T: ClassManifest] extends Stack[T] {
+class GrowingStack[T >: Null <: AnyRef: ClassManifest] extends Stack[T] {
   private var sz = 0
   private var array = new Array[T](16)
   
@@ -32,7 +32,7 @@ class GrowingStack[T: ClassManifest] extends Stack[T] {
     sz += 1
   }
   
-  def pop() = {
+  def pop() = if (sz == 0) null else {
     val r = array(sz - 1)
     sz -= 1
     r

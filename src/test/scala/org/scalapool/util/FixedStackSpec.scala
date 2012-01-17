@@ -23,7 +23,7 @@ object FixedStackSpec extends Properties("FixedStack") {
   
   property("push") = forAll (ranges) {
     range =>
-    val fs = new FixedStack[Int](range.length)
+    val fs = new FixedStack[java.lang.Integer](range.length)
     for (n <- range) fs.push(n)
     
     (fs.isFull) :| "is full: %s".format(fs)
@@ -34,7 +34,7 @@ object FixedStackSpec extends Properties("FixedStack") {
   
   property("pop") = forAll (ranges) {
     range =>
-    val fs = new FixedStack[Int](range.length)
+    val fs = new FixedStack[java.lang.Integer](range.length)
     for (n <- range) fs.push(n)
     val xs = build { fs.pop() } until (fs.isEmpty)
     

@@ -11,9 +11,15 @@ package org.scalapool
 
 
 
-/** Describes objects which can be disposed. */
-trait Disposable[+R <: Disposable[R]] {
-
+/** Describes objects which can be disposed.
+ *  
+ *  Disposable objects should extends this trait:
+ *  {{{
+ *  class Node extends Disposable[Node]
+ *  }}}
+ */
+trait Disposable[+R] {
+  
   /** Optionally disposes this object.
    *  
    *  A disposed object may not be used in the application again.

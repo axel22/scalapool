@@ -20,11 +20,15 @@ package singlethread
  *  This memory pool does not allocate extra memory to keep track of the objects,
  *  but requires a special field in the objects and does not have memory-locality
  *  guarantees.
+ *  
+ *  Free lists have shown to be faster in single thread benchmarks than heap allocation.
  */
-class FreeList[R <: Linkable[R]](ctor: =>R)(init: R => Unit)(val special: SpecialInitializer[R])
+class FreeList[R >: Null <: Linkable[R]](ctor: =>R)(init: R => Unit)
 extends MemoryPool[R] {
   
   private var freelist: R = _
+  
+  val special = resolveInit(ctor)
   
   def allocate(): R = {
     val obj = if (freelist eq null) ctor else {

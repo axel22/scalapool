@@ -15,24 +15,58 @@ import singlethread.Poolable
 
 /** Unrolled stack.
  */
-class UnrolledStack[T: ClassManifest] extends Stack[T] {
-  import UnrolledStack.Node
+final class UnrolledStack[T >: Null <: AnyRef: ClassManifest] extends Stack[T] {
+  import UnrolledStack.{Node, NODESIZE}
   
-  val allocator: Allocator[Node[T]] = Allocator.singleThread.fixedPool(16)(new Node[T](null)) { _.prev = null }
-  var stacklet = new Node(null)
+  private val allocator: Allocator[Node[T]] = Allocator.singleThread.fixedPool(new Node[T](null))(16) { _.prev = null }
+  private var stacklet = new Node(null)
   
-  def push(x: T) = stacklet = stacklet.push(x, this)
+  final def push(x: T): Unit = {
+    val curr = stacklet
+    if (curr.front < NODESIZE) {
+      curr.array(curr.front) = x
+      curr.front += 1
+    } else {
+      val n = allocator.allocate()
+      n.prev = curr
+      n.array(0) = x
+      n.front = 1
+      stacklet = n
+    }
+  }
   
-  def pop() = stacklet.pop(this)
+  final def pop(): T = {
+    val curr = stacklet
+    if (curr.front > 0) {
+      curr.front -= 1
+      val elem = curr.array(curr.front)
+      curr.array(curr.front) = null
+      elem
+    } else bigPop()
+  }
   
-  override def isEmpty = stacklet.isEmpty && !stacklet.hasPredecessor
+  private def bigPop(): T = {
+    val curr = stacklet
+    if (curr.prev ne null) {
+      val p = curr.prev
+      stacklet = p
+      allocator.dispose(curr)
+      
+      p.front -= 1
+      val elem = p.array(p.front)
+      p.array(p.front) = null
+      elem
+    } else null
+  }
+  
+  final override def isEmpty = stacklet.isEmpty && !stacklet.hasPredecessor
   
   def isFull = false
   
   def foreach[U](f: T => U) = stacklet.foreach(f)
   
   override def toString = "UnrolledStack[top stacklet: %s](%s)".format(
-    stacklet.array.take(stacklet.front).mkString(", "),
+    stacklet.string,
     this.mkString(", ")
   )
   
@@ -45,32 +79,13 @@ object UnrolledStack {
   
   final class Node[T: ClassManifest](var prev: Node[T]) extends Poolable[Node[T]] {
     val array = new Array[T](NODESIZE)
-    var front = 0
+    final var front = 0
+    
+    private[scalapool] def string = array.take(front).mkString(", ")
     
     def isEmpty = front == 0
     
     def hasPredecessor = prev ne null
-    
-    def push(x: T, us: UnrolledStack[T]): Node[T] = if (front < NODESIZE) {
-      array(front) = x
-      front += 1
-      this
-    } else {
-      val n = us.allocator.allocate()
-      n.prev = this
-      n.push(x, us)
-    }
-    
-    def pop(us: UnrolledStack[T]): T = if (!isEmpty) {
-      front -= 1
-      val elem = array(front)
-      array(front) = null.asInstanceOf[T]
-      elem
-    } else {
-      us.stacklet = prev
-      us.allocator.dispose(this)
-      prev.pop(us)
-    }
     
     def foreach[U](f: T => U) {
       var i = front

@@ -37,7 +37,7 @@ import annotation.{tailrec, switch}
  *  The `reading` block must not fail with an exception due to reading a
  *  `Readable` object in an inconsistent state.
  */
-abstract class Readable[R <: Readable[R]] extends Poolable[R] {
+abstract class Readable[R >: Null <: Readable[R]] extends Poolable[R] {
   @volatile
   private var stampcount = 0L
   

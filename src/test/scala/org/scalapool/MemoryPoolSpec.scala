@@ -44,7 +44,7 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
   
   property("singlethread.FixedPool.allocate") = forAll (ranges, choose(0, 8)) {
     (range, capacity) =>
-    val pool = Allocator.singleThread.fixedPool(capacity)(new Node(-1)) {
+    val pool = Allocator.singleThread.fixedPool(new Node(-1))(capacity) {
       _.x = 0
     }
     testAllocate(range, pool)
@@ -86,7 +86,7 @@ object MemoryPoolSpec extends Properties("MemoryPool") {
   
   property("singlethread.FixedPool.dispose") = forAll (ranges, choose(0, 8)) {
     (range, capacity) =>
-    val pool = Allocator.singleThread.fixedPool(capacity)(new Node(-1)) { _.x = 0 }
+    val pool = Allocator.singleThread.fixedPool(new Node(-1))(capacity) { _.x = 0 }
     testDispose(range, pool)
   }
   

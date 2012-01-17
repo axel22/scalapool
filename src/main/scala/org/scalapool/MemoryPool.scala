@@ -9,6 +9,7 @@ package org.scalapool
 
 
 import annotation.unchecked._
+import org.scalapool.singlethread.{Poolable, Linkable}
 
 
 
@@ -17,8 +18,36 @@ import annotation.unchecked._
  *  The memory pool allocates objects from its internal storage or by
  *  allocating additional memory, as needed.
  */
-abstract class MemoryPool[R] extends Allocator[R] {
+abstract class MemoryPool[R >: Null <: AnyRef] extends Allocator[R] {
+self =>
+  
   def special: SpecialInitializer[R]
+  
+  private[scalapool] def resolveInit(obj: R @uncheckedVariance): SpecialInitializer[R] = {
+    val si = obj match {
+      case p: Poolable[_] with Linkable[_] => new SpecialInitializer[Poolable[R] with Linkable[R]] {
+        def apply(obj: Poolable[R] with Linkable[R]) {
+          obj._memory_pool = self
+          obj._linkable_next = null.asInstanceOf[R]
+        }
+      }
+      case p: Linkable[_] => new SpecialInitializer[Linkable[R]] {
+        def apply(obj: Linkable[R]) {
+          obj._linkable_next = null.asInstanceOf[R]
+        }
+      }
+      case p: Poolable[_] => new SpecialInitializer[Poolable[R]] {
+        def apply(obj: Poolable[R]) {
+          obj._memory_pool = self
+        }
+      }
+      case _ => new SpecialInitializer[R] {
+        def apply(obj: R) {}
+      }
+    }
+    si.asInstanceOf[SpecialInitializer[R]]
+  }
+  
 }
 
 

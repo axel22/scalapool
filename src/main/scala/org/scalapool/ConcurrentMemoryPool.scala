@@ -17,15 +17,15 @@ import concurrent.{Readable, Poolable}
  *  
  *  Pools of this type can allocate and dispose objects in a thread-safe manner.
  */
-trait ConcurrentMemoryPool[R] extends Allocator[R] {
+trait ConcurrentMemoryPool[R >: Null <: AnyRef] extends Allocator[R] {
   protected def specialInitialize(obj: R) {
     import concurrent.Acquirable
     if (obj.isInstanceOf[Poolable[_]]) {
-      obj.asInstanceOf[Poolable[Nothing]]._memory_pool = this.asInstanceOf[ConcurrentMemoryPool[Nothing]]
+      obj.asInstanceOf[Poolable[Null]]._memory_pool = this.asInstanceOf[ConcurrentMemoryPool[Null]]
     }
     if (obj.isInstanceOf[Acquirable[_]]) {
       // order is important!!
-      obj.asInstanceOf[Acquirable[Nothing]].reallocateInit()
+      obj.asInstanceOf[Acquirable[Null]].reallocateInit()
     }
     if (obj.isInstanceOf[Readable[_]]) {
       val readable = obj.asInstanceOf[Readable[_]]

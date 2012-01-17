@@ -16,7 +16,7 @@ import annotation.{tailrec, switch}
 
 /** Describes objects which can be owned to concurrent memory pools.
  */
-trait Poolable[R <: Poolable[R]] extends Disposable[R] {
+trait Poolable[R >: Null <: Poolable[R]] extends Disposable[R] {
   @volatile
   private[scalapool] var _memory_pool: ConcurrentMemoryPool[R] = _
   

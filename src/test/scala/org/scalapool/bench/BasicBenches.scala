@@ -16,7 +16,7 @@ import compat.Platform
 
 
 trait BenchConfig {
-  val size = 500000000
+  val size = System.getProperty("size").toInt
   var foo: Foo = null
   
   def main(args: Array[String]) {
@@ -51,6 +51,66 @@ object BasicFreeList extends BenchConfig {
   
   def run() {
     val mempool = Allocator.singleThread.freeList(new Foo) {
+      _.x = 0
+    }
+    
+    var i = 0
+    val sz = size
+    while (i < sz) {
+      foo = mempool.allocate()
+      foo.x = 1
+      mempool.dispose(foo)
+      i += 1
+    }
+  }
+  
+}
+
+
+object BasicUnlimitedPool extends BenchConfig {
+  
+  def run() {
+    val mempool = Allocator.singleThread.unlimitedPool(new Foo) {
+      _.x = 0
+    }
+    
+    var i = 0
+    val sz = size
+    while (i < sz) {
+      foo = mempool.allocate()
+      foo.x = 1
+      mempool.dispose(foo)
+      i += 1
+    }
+  }
+  
+}
+
+
+object BasicFixedPool extends BenchConfig {
+  
+  def run() {
+    val mempool = Allocator.singleThread.fixedPool(new Foo)(16) {
+      _.x = 0
+    }
+    
+    var i = 0
+    val sz = size
+    while (i < sz) {
+      foo = mempool.allocate()
+      foo.x = 1
+      mempool.dispose(foo)
+      i += 1
+    }
+  }
+  
+}
+
+
+object BasicGrowingPool extends BenchConfig {
+  
+  def run() {
+    val mempool = Allocator.singleThread.growingPool(new Foo) {
       _.x = 0
     }
     

@@ -74,7 +74,7 @@ import annotation.{tailrec, switch}
  *  calls `dispose` in the meanwhile, the object will not be disposed until
  *  all the threads that called `acquire` call `release` on the object.
  */
-abstract class Acquirable[R <: Acquirable[R]] extends JAcquirable with Poolable[R] {
+abstract class Acquirable[R >: Null <: Acquirable[R]] extends JAcquirable with Poolable[R] {
   import Acquirable._
   import JAcquirable._
   
