@@ -15,7 +15,7 @@ import compat.Platform
 
 
 
-trait BenchConfig {
+trait BasicConfig {
   val size = System.getProperty("size").toInt
   var foo: Foo = null
   
@@ -32,7 +32,7 @@ trait BenchConfig {
 }
 
 
-object BasicHeap extends BenchConfig {
+object BasicHeap extends BasicConfig {
   
   def run() {
     var i = 0
@@ -47,7 +47,7 @@ object BasicHeap extends BenchConfig {
 }
 
 
-object BasicHeapAllocator extends BenchConfig {
+object BasicHeapAllocator extends BasicConfig {
   
   def run() {
     val mempool = Allocator.heap(new Foo) {
@@ -67,7 +67,7 @@ object BasicHeapAllocator extends BenchConfig {
 }
 
 
-object BasicFreeList extends BenchConfig {
+object BasicFreeList extends BasicConfig {
   
   def run() {
     val mempool = Allocator.singleThread.freeList(new Foo) {
@@ -87,7 +87,7 @@ object BasicFreeList extends BenchConfig {
 }
 
 
-object BasicUnrolledPool extends BenchConfig {
+object BasicUnrolledPool extends BasicConfig {
   
   def run() {
     val mempool = Allocator.singleThread.unrolledPool(new Foo) {
@@ -107,7 +107,7 @@ object BasicUnrolledPool extends BenchConfig {
 }
 
 
-object BasicFixedPool extends BenchConfig {
+object BasicFixedPool extends BasicConfig {
   
   def run() {
     val mempool = Allocator.singleThread.fixedPool(new Foo)(16) {
@@ -127,7 +127,7 @@ object BasicFixedPool extends BenchConfig {
 }
 
 
-object BasicGrowingPool extends BenchConfig {
+object BasicGrowingPool extends BasicConfig {
   
   def run() {
     val mempool = Allocator.singleThread.growingPool(new Foo) {

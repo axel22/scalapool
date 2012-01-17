@@ -28,10 +28,11 @@ class ThreadLocalPool[R >: Null <: AnyRef](memoryPoolFactory: () => MemoryPool[R
   val localPool = new ThreadLocal[MemoryPool[R]] {
     override def initialValue = memoryPoolFactory()
   }
+  val special = resolveInit(memoryPoolFactory().allocate())
   
   def allocate(): R = {
     val obj = localPool.get.allocate()
-    specialInitialize(obj)
+    special(obj)
     obj
   }
   

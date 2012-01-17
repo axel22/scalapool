@@ -15,7 +15,9 @@ import annotation.unchecked._
 
 /** A concurrent memory pool.
  */
-class CPool[R >: Null <: AnyRef] extends ConcurrentMemoryPool[R] {
+class CPool[R >: Null <: AnyRef](ctor: =>R)(init: R => Unit) extends ConcurrentMemoryPool[R] {
+  
+  val special = resolveInit(ctor)
   
   def allocate(): R = {
     null.asInstanceOf[R]
