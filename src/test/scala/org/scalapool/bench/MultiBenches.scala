@@ -18,17 +18,20 @@ import compat.Platform
 trait MultiConfig {
   val size = System.getProperty("size").toInt
   val par = System.getProperty("par").toInt
-  var foo: Foo = null
   
   def main(args: Array[String]) {
     val times = if (args.length == 0) 1 else args(0).toInt
+    var measurements: List[Long] = Nil
     for (i <- 0 until times) {
       val start = Platform.currentTime
       run()
       val end = Platform.currentTime
       
-      println(i + ") Running time: " + (end - start) + " ms")
+      val time = (end - start)
+      println(i + ") Running time: " + time + " ms")
+      measurements ::= time
     }
+    println(">>> All running times: " + measurements.reverse.mkString("\t"))
   }
   
   def run(): Unit
@@ -42,6 +45,7 @@ object MultiHeap extends MultiConfig {
     val sz = size / par
     
     val threads = for (_ <- 0 until par) yield new Thread {
+      var foo: Foo = null
       override def run() {
         var i = 0
         while (i < sz) {
@@ -74,6 +78,7 @@ object MultiThreadLocalExperiment extends MultiConfig {
     }
     
     val threads = for (_ <- 0 until par) yield new Thread {
+      var foo: Foo = null
       override def run() {
         var i = 0
         while (i < sz) {
@@ -83,6 +88,33 @@ object MultiThreadLocalExperiment extends MultiConfig {
         }
       }
     }
+    
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+  }
+  
+}
+
+
+object MultiVolatileExperiment extends MultiConfig {
+  
+  final class Inserter(val sz: Int) extends Thread {
+    @volatile var vfoo = new Foo
+    var foo: Foo = null
+    override def run() {
+      var i = 0
+      while (i < sz) {
+        if (i >= 0) foo = vfoo
+        foo.x = 1
+        i += 1
+      }
+    }
+  }
+  
+  def run() {
+    val sz = size / par
+    
+    val threads = for (_ <- 0 until par) yield new Inserter(sz)
     
     threads.foreach(_.start())
     threads.foreach(_.join())
@@ -102,6 +134,7 @@ object MultiThreadLocalFreeList extends MultiConfig {
     }
     
     val threads = for (_ <- 0 until par) yield new Thread {
+      var foo: Foo = null
       override def run() {
         var i = 0
         while (i < sz) {
