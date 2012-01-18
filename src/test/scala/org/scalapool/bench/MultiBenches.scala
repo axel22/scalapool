@@ -21,11 +21,14 @@ trait MultiConfig {
   var foo: Foo = null
   
   def main(args: Array[String]) {
-    val start = Platform.currentTime
-    run()
-    val end = Platform.currentTime
-    
-    println("Running time: " + (end - start) + " ms")
+    val times = if (args.length == 0) 1 else args(0).toInt
+    for (i <- 0 until times) {
+      val start = Platform.currentTime
+      run()
+      val end = Platform.currentTime
+      
+      println(i + ") Running time: " + (end - start) + " ms")
+    }
   }
   
   def run(): Unit
