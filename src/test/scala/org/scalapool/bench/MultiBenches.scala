@@ -47,9 +47,9 @@ object MultiHeap extends MultiConfig {
     val sz = size / par
     
     val threads = for (_ <- 0 until par) yield new Thread {
-      var foo: Foo = null
       override def run() {
         var i = 0
+        var foo: Foo = null
         while (i < sz) {
           foo = new Foo
           foo.x = 1
