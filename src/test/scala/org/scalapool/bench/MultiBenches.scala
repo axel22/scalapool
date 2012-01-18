@@ -56,6 +56,38 @@ object MultiHeap extends MultiConfig {
 }
 
 
+object MultiThreadLocalExperiment extends MultiConfig {
+  
+  def run() {
+    val sz = size / par
+    val mempool = Allocator.concurrent.threadLocalPool {
+      Allocator.singleThread.freeList(new Foo) {
+        _.x = 0
+      }
+    }
+    
+    val threadlocal = new ThreadLocal[Foo] {
+      override def initialValue = new Foo
+    }
+    
+    val threads = for (_ <- 0 until par) yield new Thread {
+      override def run() {
+        var i = 0
+        while (i < sz) {
+          foo = threadlocal.get
+          foo.x = 1
+          i += 1
+        }
+      }
+    }
+    
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+  }
+  
+}
+
+
 object MultiThreadLocalFreeList extends MultiConfig {
   
   def run() {
