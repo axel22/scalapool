@@ -31,7 +31,9 @@ trait MultiConfig {
       println(i + ") Running time: " + time + " ms")
       measurements ::= time
     }
+    println(">>>")
     println(">>> All running times: " + measurements.reverse.mkString("\t"))
+    println(">>>")
   }
   
   def run(): Unit
@@ -63,48 +65,15 @@ object MultiHeap extends MultiConfig {
 }
 
 
+/** Parallelization terrible - slowing down for 2 cores already. */
 object MultiThreadLocalExperiment extends MultiConfig {
   
-  def run() {
-    val sz = size / par
-    val mempool = Allocator.concurrent.threadLocalPool {
-      Allocator.singleThread.freeList(new Foo) {
-        _.x = 0
-      }
-    }
-    
-    val threadlocal = new ThreadLocal[Foo] {
-      override def initialValue = new Foo
-    }
-    
-    val threads = for (_ <- 0 until par) yield new Thread {
-      var foo: Foo = null
-      override def run() {
-        var i = 0
-        while (i < sz) {
-          foo = threadlocal.get
-          foo.x = 1
-          i += 1
-        }
-      }
-    }
-    
-    threads.foreach(_.start())
-    threads.foreach(_.join())
-  }
-  
-}
-
-
-object MultiVolatileExperiment extends MultiConfig {
-  
-  final class Inserter(val sz: Int) extends Thread {
-    @volatile var vfoo = new Foo
-    var foo: Foo = null
+  final class Reader(val sz: Int, val tl: ThreadLocal[Foo]) extends Thread {
     override def run() {
       var i = 0
+      var foo: Foo = null
       while (i < sz) {
-        if (i >= 0) foo = vfoo
+        foo = tl.get
         foo.x = 1
         i += 1
       }
@@ -113,8 +82,36 @@ object MultiVolatileExperiment extends MultiConfig {
   
   def run() {
     val sz = size / par
+    val threadlocal = new ThreadLocal[Foo] {
+      override def initialValue = new Foo
+    }
     
-    val threads = for (_ <- 0 until par) yield new Inserter(sz)
+    val threads = for (_ <- 0 until par) yield new Reader(sz, threadlocal)
+    
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+  }
+  
+}
+
+
+/** Parallelization almost linear up to 8 cores. */
+object MultiVolatileExperiment extends MultiConfig {
+  
+  final class Reader(val sz: Int, idx: Int) extends Thread {
+    @volatile var vfoo = new Foo
+    override def run() {
+      var i = 0
+      while (i < sz) {
+        vfoo.x = 1
+        i += 1
+      }
+    }
+  }
+  
+  def run() {
+    val sz = size / par
+    val threads = for (i <- 0 until par) yield new Reader(sz, i)
     
     threads.foreach(_.start())
     threads.foreach(_.join())

@@ -31,7 +31,7 @@ object ConcurrentMemoryPoolSpec extends Properties("ConcurrentMemoryPool") {
     
     (range zip nodes.map(_.x)).forall {
       case (x, y) => x == y
-    } :| "nodes have growing `x`: %s"
+    } :| "nodes have growing `x`: %s".format((range zip nodes.map(_.x)).find(t => t._1 != t._2))
   }
   
   property("concurrent.ThreadLocalPool.allocate") = forAll (ranges) {

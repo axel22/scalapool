@@ -147,4 +147,3 @@ object BasicGrowingPool extends BasicConfig {
 }
 
 
-class Foo(var x: Int = 0) extends Linkable[Foo]
