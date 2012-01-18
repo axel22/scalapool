@@ -62,13 +62,12 @@ import annotation.{tailrec, switch}
  *  }
  *  }}}
  *  
+ *  The `obtainReference()` method above should return a reference to the same
+ *  object provided that no concurrent modifications occurred.
+ *  
  *  These constructs are marked with the `@inline` annotation,
  *  so no closure is allocated for these objects provided that
- *  the `-Yinline` compiler option is used.
- *  Scala 2.9.1. actually inlines these methods but generates
- *  a `new` call to construct closure object nonetheless (which
- *  is then not used), so turning on escape analysis in the JVM
- *  may be essential.
+ *  the `-optimise` compiler option is used.
  *  
  *  What the `acquire`/`release` pair ensures is that even if another thread
  *  calls `dispose` in the meanwhile, the object will not be disposed until

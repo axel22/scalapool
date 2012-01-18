@@ -23,6 +23,9 @@ import annotation.unchecked._
  *  In the situation where a producer thread constantly allocates objects and a consumer thread disposes them,
  *  an out of memory error will happen eventually, since the consumer pool will be filled and those objects
  *  never used up.
+ *  
+ *  Several times slower than heap-based allocation due to a thread local lookup, but much more scalable as more
+ *  processors are being used.
  */
 class ThreadLocalPool[R >: Null <: AnyRef](memoryPoolFactory: () => MemoryPool[R]) extends ConcurrentMemoryPool[R] {
   val localPool = new ThreadLocal[MemoryPool[R]] {

@@ -131,9 +131,9 @@ object MultiThreadLocalFreeList extends MultiConfig {
     }
     
     val threads = for (_ <- 0 until par) yield new Thread {
-      var foo: Foo = null
       override def run() {
         var i = 0
+        var foo: Foo = null
         while (i < sz) {
           foo = mempool.allocate()
           foo.x = 1
