@@ -15,11 +15,11 @@ import compat.Platform
 
 
 
-trait MultiConfig {
+abstract class MultiConfig {
   val size = System.getProperty("size").toInt
   val par = System.getProperty("par").toInt
   
-  def main(args: Array[String]) {
+  def mainMethod(args: Array[String]) {
     val times = if (args.length == 0) 1 else args(0).toInt
     var measurements: List[Long] = Nil
     for (i <- 0 until times) {
@@ -41,7 +41,16 @@ trait MultiConfig {
 }
 
 
-object MultiHeap extends MultiConfig {
+abstract class MultiMain extends MultiConfig {
+  
+  def main(args: Array[String]) {
+    mainMethod(args)
+  }
+  
+}
+
+
+object MultiHeap extends MultiMain {
   
   def run() {
     val sz = size / par
@@ -66,7 +75,7 @@ object MultiHeap extends MultiConfig {
 
 
 /** Parallelization terrible - slowing down for 2 cores already. */
-object MultiThreadLocalExperiment extends MultiConfig {
+object MultiThreadLocalExperiment extends MultiMain {
   
   final class Reader(val sz: Int, val tl: ThreadLocal[Foo]) extends Thread {
     override def run() {
@@ -96,14 +105,16 @@ object MultiThreadLocalExperiment extends MultiConfig {
 
 
 /** Parallelization almost linear up to 8 cores. */
-object MultiVolatileExperiment extends MultiConfig {
+object MultiVolatileExperiment extends MultiMain {
   
   final class Reader(val sz: Int, idx: Int) extends Thread {
     @volatile var vfoo = new Foo
+    var bar: Foo = null
     override def run() {
       var i = 0
       while (i < sz) {
         vfoo.x = 1
+        bar = vfoo
         i += 1
       }
     }
@@ -120,7 +131,7 @@ object MultiVolatileExperiment extends MultiConfig {
 }
 
 
-object MultiThreadLocalFreeList extends MultiConfig {
+object MultiThreadLocalFreeList extends MultiMain {
   
   def run() {
     val sz = size / par
