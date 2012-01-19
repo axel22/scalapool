@@ -74,7 +74,6 @@ object MultiHeap extends MultiMain {
 }
 
 
-/** Parallelization terrible - slowing down for 2 cores already. */
 object MultiThreadLocalExperiment extends MultiMain {
   
   final class Reader(val sz: Int, val tl: ThreadLocal[Foo]) extends Thread {
@@ -104,7 +103,6 @@ object MultiThreadLocalExperiment extends MultiMain {
 }
 
 
-/** Parallelization almost linear up to 8 cores. */
 object MultiVolatileExperiment extends MultiMain {
   
   final class Reader(val sz: Int, idx: Int) extends Thread {
@@ -159,5 +157,58 @@ object MultiThreadLocalFreeList extends MultiMain {
   }
   
 }
+
+
+object MultiStackExperiment extends MultiMain {
+  
+  final class Worker(private val idx: Int, private val size: Int) extends Thread {
+    override def run() {
+      var v = new Foo
+      val arr = new Array[Foo](128)
+      val sz = size
+      var i = 0
+      var pos = 0
+      while (i < sz) {
+        if (i % 2 == 0) {
+          arr(pos) = v
+          pos += 1
+        } else {
+          pos -= 1
+          v = arr(pos)
+        }
+        i += 1
+      }
+    }
+  }
+  
+  def run() {
+    val sz = size / par
+    val threads = for (i <- 0 until par) yield new Worker(i, sz)
+    
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+  }
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
