@@ -129,6 +129,37 @@ object MultiVolatileExperiment extends MultiMain {
 }
 
 
+object MultiVolatileExperiment2 extends MultiMain {
+  
+  final class Holder {
+    var bar: Foo = null
+  }
+  
+  final class Reader(val sz: Int, idx: Int) extends Thread {
+    @volatile var vfoo = new Foo
+    var holder: Holder = null
+    override def run() {
+      var i = 0
+      holder = new Holder
+      while (i < sz) {
+        vfoo.x = 1
+        holder.bar = vfoo
+        i += 1
+      }
+    }
+  }
+  
+  def run() {
+    val sz = size / par
+    val threads = for (i <- 0 until par) yield new Reader(sz, i)
+    
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+  }
+  
+}
+
+
 object MultiThreadLocalFreeList extends MultiMain {
   
   def run() {
@@ -161,13 +192,19 @@ object MultiThreadLocalFreeList extends MultiMain {
 
 object MultiStackExperiment extends MultiMain {
   
-  final class Worker(private val idx: Int, private val size: Int) extends Thread {
+  class Worker(private val idx: Int, private val size: Int) extends Thread {
+    val array = new Array[Foo](1024)
+    
     override def run() {
+      val arr = array
+      loop(arr)
+    }
+    
+    def loop(arr: Array[Foo]) {
       var v = new Foo
-      val arr = new Array[Foo](128)
       val sz = size
       var i = 0
-      var pos = 0
+      var pos = 512
       while (i < sz) {
         if (i % 2 == 0) {
           arr(pos) = v
@@ -179,11 +216,51 @@ object MultiStackExperiment extends MultiMain {
         i += 1
       }
     }
+    
   }
   
   def run() {
     val sz = size / par
     val threads = for (i <- 0 until par) yield new Worker(i, sz)
+    
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+  }
+  
+}
+
+
+object MultiStackExperiment2 extends MultiMain {
+  
+  class Worker(private val idx: Int, private val size: Int, val array: Array[Foo]) extends Thread {
+    override def run() {
+      val arr = array
+      loop(arr)
+    }
+    
+    def loop(arr: Array[Foo]) {
+      var v = new Foo
+      val sz = size
+      var i = 0
+      var pos = 0 + idx * 2048
+      while (i < sz) {
+        if (i % 2 == 0) {
+          arr(pos) = v
+          pos += 1
+        } else {
+          pos -= 1
+          v = arr(pos)
+        }
+        i += 1
+      }
+    }
+    
+  }
+  
+  def run() {
+    val sz = size / par
+    val array = new Array[Foo](2 << 16)
+    val threads = for (i <- 0 until par) yield new Worker(i, sz, array)
     
     threads.foreach(_.start())
     threads.foreach(_.join())
