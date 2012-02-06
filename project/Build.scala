@@ -26,7 +26,7 @@ object ScalapoolBuild extends Build {
     artifactPath in (Compile, packageBin),
     artifactPath in (Test, packageBin),
     packageBin in Compile,
-    packageBin in Test 
+    packageBin in Test
   ) map {
     (dp, jar, testjar, pbc, pbt) =>
     val javacommand = "java -Xmx512m -Xms512m -server -cp %s:%s:%s".format(

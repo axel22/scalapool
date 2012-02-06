@@ -20,11 +20,13 @@ trait BasicConfig {
   var foo: Foo = null
   
   def main(args: Array[String]) {
-    val start = Platform.currentTime
-    run()
-    val end = Platform.currentTime
-    
-    println("Running time: " + (end - start) + " ms")
+    for (_ <- 0 until 3) {
+      val start = Platform.currentTime
+      run()
+      val end = Platform.currentTime
+      
+      println("Running time: " + (end - start) + " ms")
+    }
   }
   
   def run(): Unit
