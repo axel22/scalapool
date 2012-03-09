@@ -60,8 +60,7 @@ object MultiHeap extends MultiMain {
       var i = 0
       while (i < sz) {
         foo = new Foo
-        foo.x = 1
-        reference = foo
+        foo.x = 1023
         i += 1
       }
     }

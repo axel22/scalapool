@@ -14,7 +14,9 @@ import singlethread._
 
 package bench {
   
-  final class Foo(_x: Int = 0) extends Linkable[Foo] {
+  final class Foo(_x: Int) extends Linkable[Foo] {
+    def this() = this(0)
+    
     @inline final var x: Int = _x
   }
   
