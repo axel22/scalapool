@@ -29,7 +29,7 @@ object ScalapoolBuild extends Build {
     packageBin in Test
   ) map {
     (dp, jar, testjar, pbc, pbt) =>
-    val javacommand = "java -Xmx512m -Xms512m -server -cp %s:%s:%s".format(
+    val javacommand = "java -Xmx512m -Xms512m -XX:+UseCondCardMark -server -cp %s:%s:%s".format(
       dp.map(_.data).mkString(":"),
       jar,
       testjar
