@@ -13,7 +13,9 @@ package org.scalapool
 
 package bench {
   
-  final class Foo(_x: Int = 0) extends singlethread.Linkable[Foo] {
+  final class Foo(_x: Int) extends singlethread.Linkable[Foo] {
+    def this() = this(0)
+    
     @inline final var x: Int = _x
   }
   
