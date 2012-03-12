@@ -20,5 +20,5 @@ import annotation.unchecked._
  *  }}}
  */
 trait Linkable[+R] {
-  private[scalapool] var _linkable_next: R @uncheckedVariance = _
+  @inline private[scalapool] var _linkable_next: R @uncheckedVariance = _
 }

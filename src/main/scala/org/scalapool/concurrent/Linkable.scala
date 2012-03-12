@@ -4,21 +4,21 @@
 ** /___/ \__/\_,_/_/ \_,_/ .__|___|___/_/    github.com/axel22/mempool **
 \*                      /_/                  (c) 2011-2012             */
 
-package org.scalapool
+package org.scalapool.concurrent
 
 
 
+import annotation.unchecked._
 
 
 
-package bench {
-  
-  final class Foo(_x: Int = 0) extends singlethread.Linkable[Foo] {
-    @inline final var x: Int = _x
-  }
-  
-  final class Bar(_x: Int = 0) extends concurrent.Linkable[Bar] {
-    @inline final var x: Int = _x
-  }  
-  
+/** Describes objects which can be linked.
+ *  
+ *  Linkable objects should extend this trait:
+ *  {{{
+ *  class Node extends Linkable[Node]
+ *  }}}
+ */
+abstract class Linkable[+R] {
+  @inline private[scalapool] var _linkable_next: R @uncheckedVariance = _
 }

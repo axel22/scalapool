@@ -55,13 +55,13 @@ object MultiHeap extends MultiMain {
   @volatile var reference: Foo = null
   
   class HeapThread(sz: Int) extends Thread {
-    var foo: Foo = null
+    var f: Foo = null
     override def run() {
       var i = 0
       while (i < sz) {
-        foo = new Foo
-        foo.x = 1
-        reference = foo
+        val foo = new Foo
+        foo.x = i
+        if (i % 442 == 0) f = foo
         i += 1
       }
     }
@@ -71,30 +71,6 @@ object MultiHeap extends MultiMain {
     val sz = size / par
     
     val threads = for (_ <- 0 until par) yield new HeapThread(sz)
-    
-    threads.foreach(_.start())
-    threads.foreach(_.join())
-  }
-  
-}
-
-
-object MultiHeapOldRef extends MultiMain {
-  
-  def run() {
-    val sz = size / par
-    
-    val threads = for (_ <- 0 until par) yield new Thread {
-      var foo: Foo = null
-      override def run() {
-        var i = 0
-        while (i < sz) {
-          foo = new Foo
-          foo.x = 1
-          i += 1
-        }
-      }
-    }
     
     threads.foreach(_.start())
     threads.foreach(_.join())
