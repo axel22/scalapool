@@ -321,6 +321,7 @@ object HashStacks extends MultiMain {
 }
 
 
+/** Performance characteristics not good. Moreover, this may leak objects causing GC. */
 object HashFreeList extends MultiMain {
   
   class StackThread(index: Int, sz: Int) extends Thread {
@@ -368,6 +369,89 @@ object HashFreeList extends MultiMain {
     f._linkable_next = old
     if (arr.compareAndSet(idx, old, f)) {}
     else dispose(f)
+  }
+  
+}
+
+
+object HashDescriptors extends MultiMain {
+  
+  class StackThread(index: Int, sz: Int) extends Thread {
+    override def run() {
+      var i = 0
+      val idx = index
+      while (i < sz) {
+        val foo = allocate()
+        foo.x = 1
+        dispose(foo)
+        i += 1
+      }
+    }
+  }
+  
+  def run() {
+    val sz = size / par
+    
+    val threads = for (index <- 0 until par) yield new StackThread(index, sz)
+    
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+  }
+  
+  // pool
+  
+  import java.util.concurrent.atomic.AtomicReferenceArray
+  
+  class Descriptor(val tid: Long) {
+    var pos: Int = 128
+    var array = new Array[Foo](257)
+    for (i <- 0 until 128) array(i) = new Foo
+  }
+  
+  val descs = new AtomicReferenceArray[Descriptor](par * 64)
+  
+  @inline def descriptor(): Descriptor = {
+    val tid = Thread.currentThread.getId
+    var hashed = tid.toInt * 0x9e3775cd
+    if (hashed < 0) hashed = -hashed
+    val idx = hashed % descs.length
+    val d = descs.get(idx)
+    if ((d ne null) && d.tid == tid) d
+    else findDescriptor(tid, idx)
+  }
+  
+  def findDescriptor(tid: Long, start: Int): Descriptor = {
+    var idx = start
+    while (true) {
+      val d = descs.get(idx)
+      if (d ne null) {
+        if (d.tid == tid) return d
+      } else {
+        val d = new Descriptor(tid)
+        if (descs.compareAndSet(idx, null, d)) return d
+      }
+      idx = (idx + 1) % descs.length
+    }
+    sys.error("unreachable code")
+  }
+  
+  def allocate(): Foo = {
+    val d = descriptor()
+    d.pos -= 1
+    if (d.pos > 0) d.array(d.pos)
+    else {
+      sys.error("not implemented")
+    }
+  }
+  
+  def dispose(f: Foo) {
+    val d = descriptor()
+    if (d.pos < 256) {
+      d.array(d.pos) = f
+      d.pos += 1
+    } else {
+      sys.error("not implemented")
+    }
   }
   
 }
