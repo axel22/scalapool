@@ -411,7 +411,7 @@ object HashDescriptors extends MultiMain {
   }
   
   // deliberately not an AtomicRefArray, 'cause we can live with a weak get
-  val descs = new Array[Descriptor](par * 255)
+  val descs = new Array[Descriptor](par * 127)
   
   @inline def descriptor(): Descriptor = {
     val tid = Thread.currentThread.getId
@@ -441,18 +441,22 @@ object HashDescriptors extends MultiMain {
   
   def allocate(): Foo = {
     val d = descriptor()
-    d.pos -= 1
-    if (d.pos >= 0) d.array(d.pos)
-    else {
+    var pos = d.pos
+    if (pos > 0) {
+      pos -= 1
+      d.pos = pos
+      d.array(pos)
+    } else {
       sys.error("not implemented")
     }
   }
   
   def dispose(f: Foo) {
     val d = descriptor()
-    if (d.pos < BLOCKSIZE) {
-      d.array(d.pos) = f
-      d.pos += 1
+    var pos = d.pos
+    if (pos < BLOCKSIZE) {
+      d.array(pos) = f
+      d.pos = pos + 1
     } else {
       sys.error("not implemented")
     }
