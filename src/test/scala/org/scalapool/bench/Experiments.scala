@@ -402,20 +402,23 @@ object HashDescriptors extends MultiMain {
   
   import java.util.concurrent.atomic.AtomicReferenceArray
   
+  final 
+  
   class Descriptor(val tid: Long) {
     var pos: Int = 128
     var array = new Array[Foo](257)
     for (i <- 0 until 128) array(i) = new Foo
   }
   
-  val descs = new AtomicReferenceArray[Descriptor](par * 64)
+  // deliberately not an AtomicRefArray, 'cause we can live with a weak get
+  val descs = new Array[Descriptor](par * 64)
   
   @inline def descriptor(): Descriptor = {
     val tid = Thread.currentThread.getId
     var hashed = tid.toInt * 0x9e3775cd
     if (hashed < 0) hashed = -hashed
     val idx = hashed % descs.length
-    val d = descs.get(idx)
+    val d = descs(idx)
     if ((d ne null) && d.tid == tid) d
     else findDescriptor(tid, idx)
   }
@@ -423,14 +426,15 @@ object HashDescriptors extends MultiMain {
   def findDescriptor(tid: Long, start: Int): Descriptor = {
     var idx = start
     while (true) {
-      val d = descs.get(idx)
+      val d = descs(idx)
       if (d ne null) {
         if (d.tid == tid) return d
+        else idx = (idx + 1) % descs.length
       } else {
         val d = new Descriptor(tid)
-        if (descs.compareAndSet(idx, null, d)) return d
+        descs(idx) = d
+        // if (descs.compareAndSet(idx, null, d)) return d
       }
-      idx = (idx + 1) % descs.length
     }
     sys.error("unreachable code")
   }
