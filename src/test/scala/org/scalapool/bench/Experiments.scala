@@ -402,11 +402,11 @@ object HashDescriptors extends MultiMain {
   
   import java.util.concurrent.atomic.AtomicReferenceArray
   
-  final 
+  final def BLOCKSIZE = 256
   
   class Descriptor(val tid: Long) {
     var pos: Int = 128
-    var array = new Array[Foo](257)
+    var array = new Array[Foo](BLOCKSIZE + 1)
     for (i <- 0 until 128) array(i) = new Foo
   }
   
@@ -415,7 +415,7 @@ object HashDescriptors extends MultiMain {
   
   @inline def descriptor(): Descriptor = {
     val tid = Thread.currentThread.getId
-    var hashed = tid.toInt * 0x9e3775cd
+    var hashed = tid.toInt
     if (hashed < 0) hashed = -hashed
     val idx = hashed % descs.length
     val d = descs(idx)
@@ -442,7 +442,7 @@ object HashDescriptors extends MultiMain {
   def allocate(): Foo = {
     val d = descriptor()
     d.pos -= 1
-    if (d.pos > 0) d.array(d.pos)
+    if (d.pos >= 0) d.array(d.pos)
     else {
       sys.error("not implemented")
     }
@@ -450,7 +450,7 @@ object HashDescriptors extends MultiMain {
   
   def dispose(f: Foo) {
     val d = descriptor()
-    if (d.pos < 256) {
+    if (d.pos < BLOCKSIZE) {
       d.array(d.pos) = f
       d.pos += 1
     } else {
