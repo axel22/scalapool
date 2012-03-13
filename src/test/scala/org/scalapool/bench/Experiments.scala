@@ -411,7 +411,7 @@ object HashDescriptors extends MultiMain {
   }
   
   // deliberately not an AtomicRefArray, 'cause we can live with a weak get
-  val descs = new Array[Descriptor](par * 64)
+  val descs = new Array[Descriptor](par * 255)
   
   @inline def descriptor(): Descriptor = {
     val tid = Thread.currentThread.getId
