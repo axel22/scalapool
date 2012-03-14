@@ -19,6 +19,13 @@ package bench {
     @inline final var x: Int = _x
   }
   
+  final class BigFoo(_x: Int) extends singlethread.Linkable[Foo] {
+    def this() = this(0)
+    val array = new Array[AnyRef](32)
+    
+    @inline final var x: Int = _x
+  }
+  
   final class Bar(_x: Int = 0) extends concurrent.Linkable[Bar] {
     @inline final var x: Int = _x
   }  

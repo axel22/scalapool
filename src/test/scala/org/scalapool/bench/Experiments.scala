@@ -400,18 +400,22 @@ object HashDescriptors extends MultiMain {
   
   // pool
   
-  import java.util.concurrent.atomic.AtomicReferenceArray
+  import java.util.concurrent.atomic._
   
   final def BLOCKSIZE = 256
   
-  class Descriptor(val tid: Long) {
+  final class Descriptor(val tid: Long) {
     var pos: Int = 128
-    var array = new Array[Foo](BLOCKSIZE + 1)
-    for (i <- 0 until 128) array(i) = new Foo
+    var active = new Array[Foo](BLOCKSIZE + 1)
+    var top = active
   }
   
-  // deliberately not an AtomicRefArray, 'cause we can live with a weak get
+  // descriptors is deliberately not an AtomicRefArray
+  // 'cause we can live with a weak get
   val descs = new Array[Descriptor](par * 127)
+  val blockindex = new AtomicReferenceArray[Array[Foo]](par * 32)
+  val blockcounter = new AtomicInteger(1)
+  val freepool = new AtomicReferenceArray[Long](par)
   
   @inline def descriptor(): Descriptor = {
     val tid = Thread.currentThread.getId
@@ -432,11 +436,15 @@ object HashDescriptors extends MultiMain {
         else idx = (idx + 1) % descs.length
       } else {
         val d = new Descriptor(tid)
+        halfFill(d.active)
         descs(idx) = d
-        // if (descs.compareAndSet(idx, null, d)) return d
       }
     }
     sys.error("unreachable code")
+  }
+  
+  def halfFill(array: Array[Foo]) {
+    for (i <- 0 until 128) array(i) = new Foo
   }
   
   def allocate(): Foo = {
@@ -445,9 +453,10 @@ object HashDescriptors extends MultiMain {
     if (pos > 0) {
       pos -= 1
       d.pos = pos
-      d.array(pos)
+      d.active(pos)
     } else {
-      sys.error("not implemented")
+      decBlock(d)
+      allocate()
     }
   }
   
@@ -455,11 +464,69 @@ object HashDescriptors extends MultiMain {
     val d = descriptor()
     var pos = d.pos
     if (pos < BLOCKSIZE) {
-      d.array(pos) = f
+      d.active(pos) = f
       d.pos = pos + 1
     } else {
-      sys.error("not implemented")
+      incBlock(d)
+      dispose(f)
     }
+  }
+  
+  def decBlock(d: Descriptor) {
+    if (d.top ne d.active) {
+      // previous block => top != active
+      d.active = d.top
+    } else {
+      // no previous block => top == active
+      var block = stealBlock()
+      if (block eq null) block = allocateFullBlock()
+      setNext(block, d.top)
+      d.top = block
+      d.active = block
+    }
+  }
+  
+  def incBlock(d: Descriptor) {
+    var block = getNext(d.active)
+    if (block eq null) {
+      block = allocateEmptyBlock()
+      setNext(d.active, block)
+    }
+    if (d.active eq d.top) {
+      d.active = block
+    } else {
+      releaseBlock(d.top)
+      d.top = d.active
+      d.active = block
+    }
+  }
+  
+  def setNext(b: Array[Foo], next: Array[Foo]) {
+    // TODO
+  }
+  
+  def getNext(b: Array[Foo]): Array[Foo] = {
+    null
+  }
+  
+  def prevBlock(d: Descriptor): Array[Foo] = {
+    null
+  }
+  
+  def stealBlock(): Array[Foo] = {
+    null
+  }
+  
+  def releaseBlock(b: Array[Foo]) {
+    // TODO
+  }
+  
+  def allocateEmptyBlock(): Array[Foo] = {
+    null
+  }
+  
+  def allocateFullBlock(): Array[Foo] = {
+    null
   }
   
 }
