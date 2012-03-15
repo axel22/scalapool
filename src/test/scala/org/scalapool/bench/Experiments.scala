@@ -376,6 +376,10 @@ object HashFreeList extends MultiMain {
 
 object HashDescriptors extends MultiMain {
   
+  val pool = new CPool(par)
+  
+  import pool._
+  
   class StackThread(index: Int, sz: Int) extends Thread {
     override def run() {
       var i = 0
@@ -398,24 +402,38 @@ object HashDescriptors extends MultiMain {
     threads.foreach(_.join())
   }
   
-  // pool
+}
+
+
+final class CPool(val par: Int) {
   
   import java.util.concurrent.atomic._
   
   final def BLOCKSIZE = 256
+  final def TIMESTAMP_OFFSET = 22
+  final def TIMESTAMP_GROWTH = 1 << 22
+  final def TIMESTAMP_MASK = ((1 << 42) - 1) << TIMESTAMP_OFFSET
+  final def INDEX_MASK = ((1 << 22) - 1)
   
   final class Descriptor(val tid: Long) {
-    var pos: Int = 128
-    var active = new Array[Foo](BLOCKSIZE + 1)
+    var active = new Block()
     var top = active
+    var activeArray = active.array
+    var activePos: Int = 128
+  }
+  
+  final class Block {
+    val array = new Array[Foo](BLOCKSIZE)
+    @volatile var idx: Int = 0
+    @volatile var next: Block = null
   }
   
   // descriptors is deliberately not an AtomicRefArray
   // 'cause we can live with a weak get
   val descs = new Array[Descriptor](par * 127)
-  val blockindex = new AtomicReferenceArray[Array[Foo]](par * 32)
+  val freepool = new AtomicLongArray(par)
   val blockcounter = new AtomicInteger(1)
-  val freepool = new AtomicReferenceArray[Long](par)
+  @volatile var blockindex = new AtomicReferenceArray[Block](par * 32)
   
   @inline def descriptor(): Descriptor = {
     val tid = Thread.currentThread.getId
@@ -443,17 +461,13 @@ object HashDescriptors extends MultiMain {
     sys.error("unreachable code")
   }
   
-  def halfFill(array: Array[Foo]) {
-    for (i <- 0 until 128) array(i) = new Foo
-  }
-  
   def allocate(): Foo = {
     val d = descriptor()
-    var pos = d.pos
+    var pos = d.activePos
     if (pos > 0) {
       pos -= 1
-      d.pos = pos
-      d.active(pos)
+      d.activePos = pos
+      d.activeArray(pos)
     } else {
       decBlock(d)
       allocate()
@@ -462,10 +476,10 @@ object HashDescriptors extends MultiMain {
   
   def dispose(f: Foo) {
     val d = descriptor()
-    var pos = d.pos
+    var pos = d.activePos
     if (pos < BLOCKSIZE) {
-      d.active(pos) = f
-      d.pos = pos + 1
+      d.activeArray(pos) = f
+      d.activePos = pos + 1
     } else {
       incBlock(d)
       dispose(f)
@@ -476,6 +490,7 @@ object HashDescriptors extends MultiMain {
     if (d.top ne d.active) {
       // previous block => top != active
       d.active = d.top
+      d.activeArray = d.active.array
     } else {
       // no previous block => top == active
       var block = stealBlock()
@@ -483,6 +498,7 @@ object HashDescriptors extends MultiMain {
       setNext(block, d.top)
       d.top = block
       d.active = block
+      d.activeArray = d.active.array
     }
   }
   
@@ -494,45 +510,68 @@ object HashDescriptors extends MultiMain {
     }
     if (d.active eq d.top) {
       d.active = block
+      d.activeArray = d.active.array
     } else {
       releaseBlock(d.top)
       d.top = d.active
       d.active = block
+      d.activeArray = d.active.array
     }
   }
   
-  def setNext(b: Array[Foo], next: Array[Foo]) {
-    // TODO
+  def getNext(b: Block): Block = {
+    b.next
   }
   
-  def getNext(b: Array[Foo]): Array[Foo] = {
+  def setNext(b: Block, next: Block) {
+    b.next = next
+  }
+  
+  def stealBlock(): Block = {
+    // TODO steal block from freepool
     null
   }
   
-  def prevBlock(d: Descriptor): Array[Foo] = {
-    null
+  def releaseBlock(b: Block) {
+    // TODO return block to freepool
   }
   
-  def stealBlock(): Array[Foo] = {
-    null
+  @tailrec
+  private def allocblock(b: Block, startsearch: Int) {
+    // TODO implement table resize when full
+    var idx = startsearch
+    if (blockindex.compareAndSet(idx, null, b)) {
+      b.idx = idx
+    } else {
+      while (blockindex.get(idx) != null) idx += 1
+      allocblock(b, idx)
+    }
   }
   
-  def releaseBlock(b: Array[Foo]) {
-    // TODO
+  def allocateEmptyBlock(): Block = {
+    val idx = blockcounter.get
+    val block = new Block
+    allocblock(block, idx)
+    block
   }
   
-  def allocateEmptyBlock(): Array[Foo] = {
-    null
+  def allocateFullBlock(): Block = {
+    val b = allocateEmptyBlock()
+    fill(b)
+    b
   }
   
-  def allocateFullBlock(): Array[Foo] = {
-    null
+  def halfFill(b: Block) {
+    val array = b.array
+    for (i <- 0 until (BLOCKSIZE / 2)) array(i) = new Foo
+  }
+  
+  def fill(b: Block) {
+    val array = b.array
+    for (i <- 0 until BLOCKSIZE) array(i) = new Foo
   }
   
 }
-
-
-
 
 
 
