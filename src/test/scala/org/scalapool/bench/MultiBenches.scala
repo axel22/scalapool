@@ -34,9 +34,14 @@ abstract class MultiConfig {
     println(">>>")
     println(">>> All running times: " + measurements.reverse.mkString("\t"))
     println(">>>")
+    
+    onExit()
   }
   
   def run(): Unit
+  
+  def onExit() {
+  }
   
 }
 

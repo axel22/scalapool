@@ -446,6 +446,10 @@ object HashDescriptorsBurst extends MultiMain {
     threads.foreach(_.join())
   }
   
+  override def onExit() {
+    printState()
+  }
+  
 }
 
 
@@ -460,24 +464,43 @@ final class CPool(val par: Int) {
   final def INDEX_MASK = ((1 << 22) - 1)
   
   final class Descriptor(val tid: Long) {
-    var active = new Block()
+    var active = allocateEmptyBlock()
     var top = active
     var activeArray = active.array
-    var activePos: Int = 128
+    var activePos: Int = active.pos
   }
   
   final class Block {
     val array = new Array[Foo](BLOCKSIZE)
+    var pos = 0
     @volatile var idx: Int = 0
     @volatile var next: Block = null
   }
   
+  final class DescriptorIndex(val tid: Long, val idx: Int) {
+    override protected def finalize() {
+      val d = descs(idx)
+      if (d.tid == tid) {
+        // return blocks in `d` to freepool
+        if (d.active ne d.top) releaseBlock(tid, d.top)
+        d.active.pos = d.activePos
+        releaseBlock(tid, d.active)
+        
+        // remove descriptor (very small chance to create garbage)
+        descs(idx) = null
+      }
+    }
+  }
+  
   // descriptors is deliberately not an AtomicRefArray
   // 'cause we can live with a weak get
-  val descs = new Array[Descriptor](par * 127)
+  val descs = new Array[Descriptor](par * 255)
   val freepool = new AtomicLongArray(par)
   val blockcounter = new AtomicInteger(1)
-  @volatile var blockarray = new AtomicReferenceArray[Block](par * 32)
+  @volatile var blockarray = new AtomicReferenceArray[Block](par * 64)
+  val descindex = new ThreadLocal[DescriptorIndex] {
+    override def initialValue = null
+  }
   
   @inline def descriptor(): Descriptor = {
     val tid = Thread.currentThread.getId
@@ -500,6 +523,7 @@ final class CPool(val par: Int) {
         val d = new Descriptor(tid)
         halfFill(d.active)
         descs(idx) = d
+        descindex.set(new DescriptorIndex(tid, idx))
       }
     }
     sys.error("unreachable code")
@@ -511,6 +535,7 @@ final class CPool(val par: Int) {
     if (pos > 0) {
       pos -= 1
       d.activePos = pos
+      //assert(d.activeArray(pos) != null, (pos, d.activeArray.mkString("[", ", ", "]")))
       d.activeArray(pos)
     } else {
       decBlock(d)
@@ -535,16 +560,22 @@ final class CPool(val par: Int) {
       // previous block => top != active
       d.active = d.top
       d.activeArray = d.active.array
-      d.activePos = BLOCKSIZE
+      //assert(d.activeArray.count(_ != null) == 256, d.activeArray.toBuffer)
+      d.activePos = d.active.pos
     } else {
       // no previous block => top == active
-      var block = stealBlock()
-      if (block eq null) block = allocateFullBlock()
+      var block = stealBlock(d.tid)
+      try {
+        if (block eq null) block = allocateFullBlock()
+      } catch {
+        case _ => 
+      }
       setNext(block, d.top)
       d.top = block
       d.active = block
       d.activeArray = d.active.array
-      d.activePos = BLOCKSIZE
+      //assert(d.activeArray.count(_ != null) == 256, d.activeArray.toBuffer)
+      d.activePos = d.active.pos
     }
   }
   
@@ -557,13 +588,13 @@ final class CPool(val par: Int) {
     if (d.active eq d.top) {
       d.active = block
       d.activeArray = d.active.array
-      d.activePos = 0
+      d.activePos = d.active.pos
     } else {
-      releaseBlock(d.top)
+      releaseBlock(d.tid, d.top)
       d.top = d.active
       d.active = block
       d.activeArray = d.active.array
-      d.activePos = 0
+      d.activePos = d.active.pos
     }
   }
   
@@ -575,13 +606,15 @@ final class CPool(val par: Int) {
     b.next = next
   }
   
-  def stealBlock(): Block = {
+  def stealBlock(tid: Long): Block = {
     // do one round on the freepool and try to steal
-    var i = 0
-    while (i < par) {
+    var attempts = par
+    var i = math.abs(tid.toInt) % par
+    while (attempts > 0) {
       val b = stealAt(i)
       if (b ne null) return b
-      i += 1
+      i = (i + 1) % par
+      attempts -= 1
     }
     
     null
@@ -589,7 +622,7 @@ final class CPool(val par: Int) {
   
   def stealAt(pos: Int): Block = {
     val blockptr = freepool.get(pos)
-    if (blockptr == 0) null
+    if ((blockptr & INDEX_MASK) == 0) null
     else {
       val stamp = blockptr & TIMESTAMP_MASK
       val nstamp = stamp + TIMESTAMP_GROWTH
@@ -603,9 +636,9 @@ final class CPool(val par: Int) {
     }
   }
   
-  def releaseBlock(b: Block) {
+  def releaseBlock(tid: Long, b: Block) {
     // loop until you manage to return the block
-    var i = 0
+    var i = math.abs(tid.toInt) % par
     while (true) {
       if (releaseAt(i, b)) return
       i = (i + 1) % par
@@ -660,14 +693,66 @@ final class CPool(val par: Int) {
   def halfFill(b: Block) {
     val array = b.array
     for (i <- 0 until (BLOCKSIZE / 2)) array(i) = new Foo
+    b.pos = BLOCKSIZE / 2
   }
   
   def fill(b: Block) {
     val array = b.array
     for (i <- 0 until BLOCKSIZE) array(i) = new Foo
+    b.pos = BLOCKSIZE
+  }
+  
+  /* debugging */
+  
+  def printState() {
+    def ara2Array(ara: AtomicReferenceArray[Block]) = {
+      val a = new Array[Block](ara.length)
+      for (i <- 0 until ara.length) a(i) = ara.get(i)
+      a
+    }
+    def ala2Array(ara: AtomicLongArray) = {
+      val a = new Array[Long](ara.length)
+      for (i <- 0 until ara.length) a(i) = ara.get(i)
+      a
+    }
+    println("CPool")
+    println("-----")
+    println("Block array: " + (ara2Array(blockarray).zipWithIndex map {
+      case (b, i) => if (b eq null) i + ": ___" else i + ": [" + b.idx + "]"
+    } mkString(", ")))
+    println("Block counter: " + blockcounter.get)
+    val freepooltxt = ala2Array(freepool) map {
+      ptr =>
+      val stamp = (ptr & TIMESTAMP_MASK) >>> TIMESTAMP_OFFSET
+      val idx = ptr & INDEX_MASK
+      "(%d, %d)".format(stamp, idx)
+    } mkString(", ")
+    println("Freepool: " + freepooltxt)
+    println("Descriptors: ")
+    for (d <- descs; if d != null) {
+      println("Tid: " + d.tid)
+      println("Top: " + d.top.idx)
+      println("Active: " + d.active.idx)
+      println("Active pos: " + d.activePos)
+      println()
+    }
   }
   
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
