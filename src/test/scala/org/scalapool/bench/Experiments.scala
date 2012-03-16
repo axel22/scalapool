@@ -477,10 +477,11 @@ final class CPool(val par: Int) {
     @volatile var next: Block = null
   }
   
-  final class DescriptorIndex(val tid: Long, val idx: Int) {
-    override protected def finalize() {
-      val d = descs(idx)
-      if (d.tid == tid) {
+  final class DescriptorIndex(val tid: Long, val idx: Int, @volatile var lastd: Descriptor) {
+    def release() {
+      val d = lastd
+      
+      if (d ne null) {
         // return blocks in `d` to freepool
         if (d.active ne d.top) releaseBlock(tid, d.top)
         d.active.pos = d.activePos
@@ -488,8 +489,12 @@ final class CPool(val par: Int) {
         
         // remove descriptor (very small chance to create garbage)
         descs(idx) = null
+        
+        // the descriptor is gone
+        lastd = null
       }
     }
+    override def finalize() = release()
   }
   
   // descriptors is deliberately not an AtomicRefArray
@@ -523,7 +528,8 @@ final class CPool(val par: Int) {
         val d = new Descriptor(tid)
         halfFill(d.active)
         descs(idx) = d
-        descindex.set(new DescriptorIndex(tid, idx))
+        if (descindex.get != null) descindex.get.release()
+        descindex.set(new DescriptorIndex(tid, idx, d))
       }
     }
     sys.error("unreachable code")
@@ -565,11 +571,7 @@ final class CPool(val par: Int) {
     } else {
       // no previous block => top == active
       var block = stealBlock(d.tid)
-      try {
-        if (block eq null) block = allocateFullBlock()
-      } catch {
-        case _ => 
-      }
+      if (block eq null) block = allocateFullBlock()
       setNext(block, d.top)
       d.top = block
       d.active = block
