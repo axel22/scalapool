@@ -405,6 +405,50 @@ object HashDescriptors extends MultiMain {
 }
 
 
+object HashDescriptorsBurst extends MultiMain {
+  
+  val burst = System.getProperty("burst").toInt
+  val pool = new CPool(par)
+  
+  import pool._
+  
+  class StackThread(index: Int, sz: Int) extends Thread {
+    override def run() {
+      var i = 0
+      val burstarray = new Array[Foo](burst)
+      while (i < sz) {
+        var j = 0
+        while (j < burst) {
+          val foo = allocate()
+          foo.x = 1
+          burstarray(j) = foo
+          j += 1
+        }
+        
+        j = 0
+        while (j < burst) {
+          val foo = burstarray(j)
+          dispose(foo)
+          j += 1
+        }
+        
+        i += burst
+      }
+    }
+  }
+  
+  def run() {
+    val sz = size / par
+    
+    val threads = for (index <- 0 until par) yield new StackThread(index, sz)
+    
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+  }
+  
+}
+
+
 final class CPool(val par: Int) {
   
   import java.util.concurrent.atomic._
@@ -433,7 +477,7 @@ final class CPool(val par: Int) {
   val descs = new Array[Descriptor](par * 127)
   val freepool = new AtomicLongArray(par)
   val blockcounter = new AtomicInteger(1)
-  @volatile var blockindex = new AtomicReferenceArray[Block](par * 32)
+  @volatile var blockarray = new AtomicReferenceArray[Block](par * 32)
   
   @inline def descriptor(): Descriptor = {
     val tid = Thread.currentThread.getId
@@ -491,6 +535,7 @@ final class CPool(val par: Int) {
       // previous block => top != active
       d.active = d.top
       d.activeArray = d.active.array
+      d.activePos = BLOCKSIZE
     } else {
       // no previous block => top == active
       var block = stealBlock()
@@ -499,6 +544,7 @@ final class CPool(val par: Int) {
       d.top = block
       d.active = block
       d.activeArray = d.active.array
+      d.activePos = BLOCKSIZE
     }
   }
   
@@ -511,11 +557,13 @@ final class CPool(val par: Int) {
     if (d.active eq d.top) {
       d.active = block
       d.activeArray = d.active.array
+      d.activePos = 0
     } else {
       releaseBlock(d.top)
       d.top = d.active
       d.active = block
       d.activeArray = d.active.array
+      d.activePos = 0
     }
   }
   
@@ -528,22 +576,70 @@ final class CPool(val par: Int) {
   }
   
   def stealBlock(): Block = {
-    // TODO steal block from freepool
+    // do one round on the freepool and try to steal
+    var i = 0
+    while (i < par) {
+      val b = stealAt(i)
+      if (b ne null) return b
+      i += 1
+    }
+    
     null
   }
   
+  def stealAt(pos: Int): Block = {
+    val blockptr = freepool.get(pos)
+    if (blockptr == 0) null
+    else {
+      val stamp = blockptr & TIMESTAMP_MASK
+      val nstamp = stamp + TIMESTAMP_GROWTH
+      val idx = blockptr & INDEX_MASK
+      val block = blockarray.get(idx.toInt)
+      val nblock = block.next
+      val nidx = if (nblock eq null) 0L else nblock.idx.toLong & ((1L << 32) - 1)
+      val nblockptr = nstamp | nidx
+      if (freepool.compareAndSet(pos, blockptr, nblockptr)) block
+      else null
+    }
+  }
+  
   def releaseBlock(b: Block) {
-    // TODO return block to freepool
+    // loop until you manage to return the block
+    var i = 0
+    while (true) {
+      if (releaseAt(i, b)) return
+      i = (i + 1) % par
+    }
+  }
+  
+  def releaseAt(pos: Int, block: Block): Boolean = {
+    val oblockptr = freepool.get(pos)
+    val ostamp = oblockptr & TIMESTAMP_MASK
+    val nstamp = ostamp + TIMESTAMP_GROWTH
+    val oidx = oblockptr & INDEX_MASK
+    val oblock = if (oidx == 0) null else blockarray.get(oidx.toInt)
+    val nidx = block.idx.toLong & ((1L << 32) - 1)
+    val nblockptr = nstamp | nidx
+    block.next = oblock
+    freepool.compareAndSet(pos, oblockptr, nblockptr)
   }
   
   @tailrec
   private def allocblock(b: Block, startsearch: Int) {
     // TODO implement table resize when full
     var idx = startsearch
-    if (blockindex.compareAndSet(idx, null, b)) {
+    if (blockarray.compareAndSet(idx, null, b)) {
+      // success - set index for the block
       b.idx = idx
+      
+      // update block counter to highest value
+      var blkcnt: Int = -1
+      do {
+        blkcnt = blockcounter.get
+      } while (blkcnt <= idx && !blockcounter.compareAndSet(blkcnt, idx + 1))
     } else {
-      while (blockindex.get(idx) != null) idx += 1
+      // find next free entry
+      while (blockarray.get(idx) != null) idx += 1
       allocblock(b, idx)
     }
   }
