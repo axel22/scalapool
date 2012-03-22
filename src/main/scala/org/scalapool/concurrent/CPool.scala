@@ -15,7 +15,7 @@ import annotation.unchecked._
 
 /** A concurrent memory pool.
  */
-class CPool[R >: Null <: AnyRef](ctor: =>R)(init: R => Unit) extends ConcurrentMemoryPool[R] {
+final class CPool[R >: Null <: AnyRef](ctor: =>R)(init: R => Unit) extends ConcurrentMemoryPool[R] {
   
   val special = resolveInit(ctor)
   

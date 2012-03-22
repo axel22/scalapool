@@ -376,7 +376,9 @@ object HashFreeList extends MultiMain {
 
 object HashDescriptors extends MultiMain {
   
-  val pool = new CPool(par)
+  val pool = new CPool[Foo](par)(new Foo)({
+    x =>
+  })
   
   import pool._
   
@@ -408,7 +410,10 @@ object HashDescriptors extends MultiMain {
 object HashDescriptorsBurst extends MultiMain {
   
   val burst = System.getProperty("burst").toInt
-  val pool = new CPool(par)
+  val pool = new CPool[Foo](par)(new Foo)({
+    x =>
+  })
+  
   
   import pool._
   
@@ -453,7 +458,7 @@ object HashDescriptorsBurst extends MultiMain {
 }
 
 
-final class CPool(val par: Int) {
+final class CPool[T <: AnyRef: Manifest](val par: Int)(ctor: =>T)(init: T => Unit) {
   
   import java.util.concurrent.atomic._
   
@@ -471,17 +476,23 @@ final class CPool(val par: Int) {
   }
   
   final class Block {
-    val array = new Array[Foo](BLOCKSIZE)
+    val array = new Array[T](BLOCKSIZE)
     var pos = 0
     @volatile var idx: Int = 0
     @volatile var next: Block = null
   }
   
   final class DescriptorIndex(val tid: Long, val idx: Int, @volatile var lastd: Descriptor) {
+    val lastd_setter = AtomicReferenceFieldUpdater.newUpdater(classOf[DescriptorIndex], classOf[Descriptor], "lastd")
+    
+    def CAS_lastd(oval: Descriptor, nval: Descriptor): Boolean = 
+      lastd_setter.compareAndSet(this, oval, nval)
+    
     def release() {
       val d = lastd
       
-      if (d ne null) {
+      if (d eq null) { /* we're done */ }
+      else if (CAS_lastd(d, null)) {
         // return blocks in `d` to freepool
         if (d.active ne d.top) releaseBlock(tid, d.top)
         d.active.pos = d.activePos
@@ -489,11 +500,9 @@ final class CPool(val par: Int) {
         
         // remove descriptor (very small chance to create garbage)
         descs(idx) = null
-        
-        // the descriptor is gone
-        lastd = null
-      }
+      } else release()
     }
+    
     override def finalize() = release()
   }
   
@@ -535,7 +544,7 @@ final class CPool(val par: Int) {
     sys.error("unreachable code")
   }
   
-  def allocate(): Foo = {
+  def allocate(): T = {
     val d = descriptor()
     var pos = d.activePos
     if (pos > 0) {
@@ -549,7 +558,7 @@ final class CPool(val par: Int) {
     }
   }
   
-  def dispose(f: Foo) {
+  def dispose(f: T) {
     val d = descriptor()
     var pos = d.activePos
     if (pos < BLOCKSIZE) {
@@ -694,13 +703,13 @@ final class CPool(val par: Int) {
   
   def halfFill(b: Block) {
     val array = b.array
-    for (i <- 0 until (BLOCKSIZE / 2)) array(i) = new Foo
+    for (i <- 0 until (BLOCKSIZE / 2)) array(i) = ctor
     b.pos = BLOCKSIZE / 2
   }
   
   def fill(b: Block) {
     val array = b.array
-    for (i <- 0 until BLOCKSIZE) array(i) = new Foo
+    for (i <- 0 until BLOCKSIZE) array(i) = ctor
     b.pos = BLOCKSIZE
   }
   
