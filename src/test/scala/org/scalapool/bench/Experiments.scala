@@ -13,6 +13,7 @@ import singlethread._
 import scala.testing.Benchmark
 import compat.Platform
 import annotation.tailrec
+import concurrent.CPool
 
 
 
@@ -376,9 +377,7 @@ object HashFreeList extends MultiMain {
 
 object HashDescriptors extends MultiMain {
   
-  val pool = new CPool[Foo](par)(new Foo)({
-    x =>
-  })
+  val pool = new CPool[Foo](par)(new Foo)(null)
   
   import pool._
   
@@ -402,6 +401,10 @@ object HashDescriptors extends MultiMain {
     
     threads.foreach(_.start())
     threads.foreach(_.join())
+  }
+  
+  override def onExit() {
+    printState()
   }
   
 }
@@ -458,7 +461,7 @@ object HashDescriptorsBurst extends MultiMain {
 }
 
 
-final class CPool[T <: AnyRef: Manifest](val par: Int)(ctor: =>T)(init: T => Unit) {
+final class CPoolProto[T <: AnyRef: Manifest](val par: Int)(ctor: =>T)(init: T => Unit) {
   
   import java.util.concurrent.atomic._
   
@@ -550,8 +553,9 @@ final class CPool[T <: AnyRef: Manifest](val par: Int)(ctor: =>T)(init: T => Uni
     if (pos > 0) {
       pos -= 1
       d.activePos = pos
-      //assert(d.activeArray(pos) != null, (pos, d.activeArray.mkString("[", ", ", "]")))
-      d.activeArray(pos)
+      val obj = d.activeArray(pos)
+      if (init ne null) init(obj)
+      obj
     } else {
       decBlock(d)
       allocate()
@@ -575,7 +579,6 @@ final class CPool[T <: AnyRef: Manifest](val par: Int)(ctor: =>T)(init: T => Uni
       // previous block => top != active
       d.active = d.top
       d.activeArray = d.active.array
-      //assert(d.activeArray.count(_ != null) == 256, d.activeArray.toBuffer)
       d.activePos = d.active.pos
     } else {
       // no previous block => top == active
@@ -585,7 +588,6 @@ final class CPool[T <: AnyRef: Manifest](val par: Int)(ctor: =>T)(init: T => Uni
       d.top = block
       d.active = block
       d.activeArray = d.active.array
-      //assert(d.activeArray.count(_ != null) == 256, d.activeArray.toBuffer)
       d.activePos = d.active.pos
     }
   }
