@@ -16,12 +16,10 @@ import annotation.tailrec
 
 /** A concurrent memory pool.
  */
-final class CPool[R >: Null <: AnyRef: Manifest](val par: Int)(ctor: =>R)(init: R => Unit)
+final class CPool[R >: Null <: AnyRef: Manifest](val par: Int, val useCleaner: Boolean = true)(ctor: =>R)(init: R => Unit)
 extends ConcurrentMemoryPool[R] {
   
   import java.util.concurrent.atomic._
-  
-  val special = resolveInit(ctor)
   
   final def BLOCKSIZE = 256
   final def TIMESTAMP_OFFSET = 22
@@ -69,16 +67,30 @@ extends ConcurrentMemoryPool[R] {
     override def finalize() = release()
   }
   
+  /* fields */
+  
+  val special = resolveInit(ctor)
+  
   // descriptors is deliberately not an AtomicRefArray
   // 'cause we can live with a weak get
   @volatile var descs = new Array[Descriptor](par * 255)
   val descsize = new AtomicInteger(0)
-  val freepool = new AtomicLongArray(par)
-  val blockcounter = new AtomicInteger(1)
-  @volatile var blockarray = new AtomicReferenceArray[Block](par * 64)
   val descindex = new ThreadLocal[DescriptorIndex] {
     override def initialValue = null
   }
+  
+  val freepool = new AtomicLongArray(par)
+  
+  val blockcounter = new AtomicInteger(1)
+  @volatile var blockarray = new AtomicReferenceArray[Block](par * 64)
+  
+  val cleaner = if (!useCleaner) null else {
+    val c = new Cleaner(this)
+    c.start()
+    c
+  }
+  
+  /* methods */
   
   @inline def descriptor(): Descriptor = {
     val tid = Thread.currentThread.getId
@@ -98,7 +110,7 @@ extends ConcurrentMemoryPool[R] {
       val d = descs(idx)
       if (d ne null) {
         if (d.tid == tid) return d
-        else if (tryRemove(idx)) { /* retry with same idx */ }
+        else if (tryRemove(descs, idx)) { /* retry with same idx */ }
         else {
           idx = (idx + 1) % descs.length
           count += 1
@@ -122,11 +134,11 @@ extends ConcurrentMemoryPool[R] {
   }
   
   def tryGrowDescriptorTable(): Unit = if ((1000 * descsize.get / descs.length) > 250) {
-    
+    // TODO
   }
   
-  def tryRemove(idx: Int): Boolean = {
-    val d = descs(idx)
+  def tryRemove(descarray: Array[Descriptor], idx: Int): Boolean = {
+    val d = descarray(idx)
     if (d != null && d.thread.getState == Thread.State.TERMINATED) {
       d.descriptorIndex.release()
       true
@@ -258,9 +270,14 @@ extends ConcurrentMemoryPool[R] {
   
   @tailrec
   private def allocblock(b: Block, startsearch: Int) {
-    // TODO implement table resize when full
     var idx = startsearch
-    if (blockarray.compareAndSet(idx, null, b)) {
+    val barr = blockarray
+    
+    // resize if full
+    if (idx >= barr.length) {
+      tryGrowBlockArray(barr)
+      allocblock(b, idx)
+    } else if (barr.compareAndSet(idx, null, b)) {
       // success - set index for the block
       b.idx = idx
       
@@ -271,9 +288,13 @@ extends ConcurrentMemoryPool[R] {
       } while (blkcnt <= idx && !blockcounter.compareAndSet(blkcnt, idx + 1))
     } else {
       // find next free entry
-      while (blockarray.get(idx) != null) idx += 1
+      while (barr.get(idx) != null && idx < barr.length) idx += 1
       allocblock(b, idx)
     }
+  }
+  
+  def tryGrowBlockArray(oldbarr: AtomicReferenceArray[Block]) {
+    // TODO
   }
   
   def allocateEmptyBlock(): Block = {
@@ -335,6 +356,56 @@ extends ConcurrentMemoryPool[R] {
       println("Active pos: " + d.activePos)
       println()
     }
+  }
+  
+}
+
+
+final class Cleaner[R >: Null <: AnyRef: Manifest](_cpool: CPool[R]) extends Thread {
+  val cpool = new java.lang.ref.WeakReference(_cpool)
+  
+  setDaemon(true)
+  
+  def MINCLEANPERIOD = 50
+  def MAXCLEANPERIOD = 1600
+  
+  var cleanperiod = MINCLEANPERIOD
+  var lastdeschash = 0
+  
+  override def run() {
+    cleaningLoop()
+  }
+  
+  @tailrec
+  def cleaningLoop(): Unit = cpool.get match {
+    case null => // we're done
+    case cpool: CPool[R] =>
+      val descs = cpool.descs
+      var observeddeschash = 0
+      var i = 0
+      val until = descs.length
+      while (i < until) {
+        // update hash
+        val d = descs(i)
+        observeddeschash = (observeddeschash + 1) * (if (d eq null) -1 else d.tid.toInt)
+        
+        // try to clean
+        cpool.tryRemove(descs, i)
+        i += 1
+      }
+      
+      // backoff if necessary
+      if (lastdeschash == observeddeschash) {
+        cleanperiod = math.min(cleanperiod * 2, MAXCLEANPERIOD)
+      } else {
+        cleanperiod = MINCLEANPERIOD
+        lastdeschash = observeddeschash
+      }
+      
+      // sleep
+      //println("cleaned... sleep for: " + cleanperiod)
+      Thread.sleep(cleanperiod)
+      cleaningLoop()
   }
   
 }
