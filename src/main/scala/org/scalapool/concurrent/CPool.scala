@@ -33,6 +33,8 @@ extends ConcurrentMemoryPool[R] {
     var top = active
     var activeArray = active.array
     var activePos: Int = active.pos
+    
+    def isLive = descriptorIndex.lastd ne null
   }
   
   final class Block {
@@ -71,19 +73,23 @@ extends ConcurrentMemoryPool[R] {
   
   val special = resolveInit(ctor)
   
-  // descriptors is deliberately not an AtomicRefArray
-  // 'cause we can live with a weak get
-  @volatile var descs = new Array[Descriptor](par * 255)
+  // descs
+  // is deliberately not an AtomicRefArray
+  // 'cause we can live with a weak get - which is faster
+  @volatile var descs = new Array[Descriptor](par * 32)
   val descsize = new AtomicInteger(0)
   val descindex = new ThreadLocal[DescriptorIndex] {
     override def initialValue = null
   }
   
+  // pool of free object blocks
   val freepool = new AtomicLongArray(par)
   
+  // blocks array
   val blockcounter = new AtomicInteger(1)
   @volatile var blockarray = new AtomicReferenceArray[Block](par * 64)
   
+  // cleaner thread, which periodically cleans the descriptor table
   val cleaner = if (!useCleaner) null else {
     val c = new Cleaner(this)
     c.start()
@@ -109,7 +115,7 @@ extends ConcurrentMemoryPool[R] {
     while (count < until) {
       val d = descs(idx)
       if (d ne null) {
-        if (d.tid == tid) return d
+        if (d.tid == tid && d.isLive) return d
         else if (tryRemove(descs, idx)) { /* retry with same idx */ }
         else {
           idx = (idx + 1) % descs.length
@@ -133,7 +139,7 @@ extends ConcurrentMemoryPool[R] {
     findDescriptor(tid, start)
   }
   
-  def tryGrowDescriptorTable(): Unit = if ((1000 * descsize.get / descs.length) > 250) {
+  def tryGrowDescriptorTable(): Unit = if ((1000 * descsize.get / descs.length) > 32) {
     // TODO
   }
   
