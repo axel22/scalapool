@@ -29,12 +29,22 @@ extends ConcurrentMemoryPool[R] {
   
   final class Descriptor(val tid: Long, val thread: Thread, idx: Int) {
     val descriptorIndex: DescriptorIndex = new DescriptorIndex(tid, idx, this)
-    var active = allocateEmptyBlock()
-    var top = active
-    var activeArray = active.array
-    var activePos: Int = active.pos
+    var active: Block = null
+    var top: Block = null
+    var activeArray: Array[R] = null
+    var activePos: Int = 0
     
     def isLive = descriptorIndex.lastd ne null
+    def initActive(b: Block) {
+      active = b
+      top = active
+      activeArray = active.array
+      activePos = active.pos
+    }
+    
+    var b = stealBlock(tid)
+    if (b eq null) b = allocateFullBlock()
+    initActive(b)
   }
   
   final class Block {
@@ -61,7 +71,7 @@ extends ConcurrentMemoryPool[R] {
         releaseBlock(tid, d.active)
         
         // remove descriptor (very small chance to create garbage)
-        descs(idx) = null
+        descriptors(idx) = null
         descsize.getAndDecrement()
       } else release()
     }
@@ -76,11 +86,12 @@ extends ConcurrentMemoryPool[R] {
   // descs
   // is deliberately not an AtomicRefArray
   // 'cause we can live with a weak get - which is faster
-  @volatile var descs = new Array[Descriptor](par * 32)
+  @volatile var descriptors = new Array[Descriptor](par * 32)
   val descsize = new AtomicInteger(0)
   val descindex = new ThreadLocal[DescriptorIndex] {
     override def initialValue = null
   }
+  val descriptorsUpdater = AtomicReferenceFieldUpdater.newUpdater(classOf[CPool[R]], classOf[Array[Descriptor]], "descriptors")
   
   // pool of free object blocks
   val freepool = new AtomicLongArray(par)
@@ -88,6 +99,7 @@ extends ConcurrentMemoryPool[R] {
   // blocks array
   val blockcounter = new AtomicInteger(1)
   @volatile var blockarray = new AtomicReferenceArray[Block](par * 64)
+  val blockarrayUpdater = AtomicReferenceFieldUpdater.newUpdater(classOf[CPool[R]], classOf[AtomicReferenceArray[Block]], "blockarray")
   
   // cleaner thread, which periodically cleans the descriptor table
   val cleaner = if (!useCleaner) null else {
@@ -99,17 +111,21 @@ extends ConcurrentMemoryPool[R] {
   /* methods */
   
   @inline def descriptor(): Descriptor = {
+    val descs = descriptors
     val tid = Thread.currentThread.getId
     var hashed = tid.toInt
     if (hashed < 0) hashed = -hashed
     val idx = hashed % descs.length
     val d = descs(idx)
     if ((d ne null) && d.tid == tid) d
-    else findDescriptor(tid, idx)
+    else findDescriptor(tid)
   }
   
-  @tailrec def findDescriptor(tid: Long, start: Int): Descriptor = {
-    var idx = start
+  @tailrec def findDescriptor(tid: Long): Descriptor = {
+    val descs = descriptors
+    var hashed = tid.toInt
+    if (hashed < 0) hashed = -hashed
+    var idx = hashed % descs.length
     var count = 0
     val until = descs.length
     while (count < until) {
@@ -122,25 +138,36 @@ extends ConcurrentMemoryPool[R] {
           count += 1
         }
       } else {
-        val d = new Descriptor(tid, Thread.currentThread, idx)
-        halfFill(d.active)
-        descs(idx) = d
-        descsize.getAndIncrement()
-        
         // saving the descriptor in a threadlocal results in less garbage
         if (descindex.get != null) descindex.get.release()
+        
+        val d = new Descriptor(tid, Thread.currentThread, idx)
+        descs(idx) = d
+        descsize.getAndIncrement()
         descindex.set(d.descriptorIndex)
         
         // see if load too high
         tryGrowDescriptorTable()
+        
+        return d
       }
     }
     tryGrowDescriptorTable()
-    findDescriptor(tid, start)
+    findDescriptor(tid)
   }
   
-  def tryGrowDescriptorTable(): Unit = if ((1000 * descsize.get / descs.length) > 32) {
-    // TODO
+  def tryGrowDescriptorTable(): Unit = {
+    val descs = descriptors
+    val dsize = descsize.get
+    if ((1000 * dsize / descs.length) > 32) {
+      // println("growing descriptor table: ")
+      // println("observed size: " + dsize)
+      // println("descs length: " + descs.length)
+      val ndescs = new Array[Descriptor](descs.length * 2)
+      if (descriptorsUpdater.compareAndSet(this, descs, ndescs)) {
+        // println("managed to set to: " + ndescs.length)
+      }
+    }
   }
   
   def tryRemove(descarray: Array[Descriptor], idx: Int): Boolean = {
@@ -194,6 +221,7 @@ extends ConcurrentMemoryPool[R] {
       d.activeArray = d.active.array
       d.activePos = d.active.pos
     }
+    //println("dec block: " + d.tid + ", actpos: " + d.activePos)
   }
   
   def incBlock(d: Descriptor) {
@@ -248,8 +276,10 @@ extends ConcurrentMemoryPool[R] {
       val nblock = block.next
       val nidx = if (nblock eq null) 0L else nblock.idx.toLong & ((1L << 32) - 1)
       val nblockptr = nstamp | nidx
-      if (freepool.compareAndSet(pos, blockptr, nblockptr)) block
-      else null
+      if (freepool.compareAndSet(pos, blockptr, nblockptr)) {
+        block.next = null
+        block
+      } else null
     }
   }
   
@@ -300,7 +330,13 @@ extends ConcurrentMemoryPool[R] {
   }
   
   def tryGrowBlockArray(oldbarr: AtomicReferenceArray[Block]) {
-    // TODO
+    val nbarr = new AtomicReferenceArray[Block](oldbarr.length * 2)
+    var i = 0
+    while (i < oldbarr.length) {
+      nbarr.set(i, oldbarr.get(i))
+      i += 1
+    }
+    while (blockarray eq oldbarr) blockarrayUpdater.compareAndSet(this, oldbarr, nbarr)
   }
   
   def allocateEmptyBlock(): Block = {
@@ -355,7 +391,7 @@ extends ConcurrentMemoryPool[R] {
     } mkString(", ")
     println("Freepool: " + freepooltxt)
     println("Descriptors: ")
-    for (d <- descs; if d != null) {
+    for (d <- descriptors; if d != null) {
       println("Tid: " + d.tid)
       println("Top: " + d.top.idx)
       println("Active: " + d.active.idx)
@@ -371,6 +407,7 @@ final class Cleaner[R >: Null <: AnyRef: Manifest](_cpool: CPool[R]) extends Thr
   val cpool = new java.lang.ref.WeakReference(_cpool)
   
   setDaemon(true)
+  setName("CPool-cleaner-" + getId)
   
   def MINCLEANPERIOD = 50
   def MAXCLEANPERIOD = 1600
@@ -386,7 +423,7 @@ final class Cleaner[R >: Null <: AnyRef: Manifest](_cpool: CPool[R]) extends Thr
   def cleaningLoop(): Unit = cpool.get match {
     case null => // we're done
     case cpool: CPool[R] =>
-      val descs = cpool.descs
+      val descs = cpool.descriptors
       var observeddeschash = 0
       var i = 0
       val until = descs.length

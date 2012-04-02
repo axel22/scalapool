@@ -1,4 +1,7 @@
-
+# eclipse garbage
+.cache
+.classpath
+.project
 
 # build files
 target/
