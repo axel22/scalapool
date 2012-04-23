@@ -42,9 +42,17 @@ extends ConcurrentMemoryPool[R] {
       activePos = active.pos
     }
     
-    var b = stealBlock(tid)
-    if (b eq null) b = allocateFullBlock()
-    initActive(b)
+    initActive(fetchFullBlock(tid))
+    
+    def printOut() {
+      println("Tid: " + tid)
+      println("Top: " + top.idx)
+      println("Active: " + active.idx)
+      println("Active pos: " + activePos)
+      println("top length: " + lengthBlocks(top))
+      printBlocks(top)
+      println()
+    }
   }
   
   final class Block {
@@ -60,23 +68,93 @@ extends ConcurrentMemoryPool[R] {
     def CAS_lastd(oval: Descriptor, nval: Descriptor): Boolean = 
       lastd_setter.compareAndSet(this, oval, nval)
     
-    def release() {
+    def releaseDescriptor() {
       val d = lastd
       
       if (d eq null) { /* we're done */ }
       else if (CAS_lastd(d, null)) { // ensure only 1 release!
         // return blocks in `d` to freepool
-        if (d.active ne d.top) releaseBlock(tid, d.top)
+        if (d.active ne d.top) releaseBlock(d.top.##, d.top)
         d.active.pos = d.activePos
-        releaseBlock(tid, d.active)
+        releaseBlock(d.active.##, d.active)
         
         // remove descriptor (very small chance to create garbage)
         descriptors(idx) = null
         descsize.getAndDecrement()
-      } else release()
+      } else releaseDescriptor()
     }
     
-    override def finalize() = release()
+    override def finalize() = releaseDescriptor()
+
+  }
+  
+  final class BlockPool {
+    // pool of free object blocks
+    val pool = new AtomicLongArray(par)
+    
+    def steal(hash: Long): Block = {
+      // do 4 rounds on the freepool and try to steal
+      var attempts = par * 4
+      var i = math.abs(hash.toInt) % par
+      while (attempts > 0) {
+        val b = stealAt(i)
+        if (b ne null) return b
+        i = (i + 1) % par
+        attempts -= 1
+      }
+      
+      null
+    }
+    
+    private def stealAt(pos: Int): Block = {
+      val blockptr = pool.get(pos)
+      if ((blockptr & INDEX_MASK) == 0) null
+      else {
+        val stamp = blockptr & TIMESTAMP_MASK
+        val nstamp = stamp + TIMESTAMP_GROWTH
+        val idx = blockptr & INDEX_MASK
+        val block = blockarray.get(idx.toInt)
+        val nblock = block.next
+        val nidx = if (nblock eq null) 0L else nblock.idx.toLong & ((1L << 32) - 1)
+        val nblockptr = nstamp | nidx
+        if (pool.compareAndSet(pos, blockptr, nblockptr)) {
+          block.next = null
+          block
+        } else null
+      }
+    }
+    
+    def release(hash: Long, b: Block) {
+      // loop until you manage to return the block
+      var i = math.abs(hash.toInt) % par
+      while (true) {
+        if (releaseAt(i, b)) return
+        i = (i + 1) % par
+      }
+    }
+    
+    private def releaseAt(pos: Int, block: Block): Boolean = {
+      val oblockptr = pool.get(pos)
+      val ostamp = oblockptr & TIMESTAMP_MASK
+      val nstamp = ostamp + TIMESTAMP_GROWTH
+      val oidx = oblockptr & INDEX_MASK
+      val oblock = if (oidx == 0) null else blockarray.get(oidx.toInt)
+      val nidx = block.idx.toLong & ((1L << 32) - 1)
+      val nblockptr = nstamp | nidx
+      block.next = oblock
+      pool.compareAndSet(pos, oblockptr, nblockptr)
+    }
+    
+    override def toString = {
+      val pooltxt = ala2Array(pool) map {
+        ptr =>
+        val stamp = (ptr & TIMESTAMP_MASK) >>> TIMESTAMP_OFFSET
+        val idx = ptr & INDEX_MASK
+        "(%d, %s)".format(stamp, idx + " -> elems: " + lengthBlocks(blockarray.get(idx.toInt)))
+      } mkString(", ")
+      pooltxt
+    }
+    
   }
   
   /* fields */
@@ -93,8 +171,9 @@ extends ConcurrentMemoryPool[R] {
   }
   val descriptorsUpdater = AtomicReferenceFieldUpdater.newUpdater(classOf[CPool[R]], classOf[Array[Descriptor]], "descriptors")
   
-  // pool of free object blocks
-  val freepool = new AtomicLongArray(par)
+  val freepool = new BlockPool
+  val emptypool = new BlockPool
+  val halfpool = new BlockPool
   
   // blocks array
   val blockcounter = new AtomicInteger(1)
@@ -139,7 +218,7 @@ extends ConcurrentMemoryPool[R] {
         }
       } else {
         // saving the descriptor in a threadlocal results in less garbage
-        if (descindex.get != null) descindex.get.release()
+        if (descindex.get != null) descindex.get.releaseDescriptor()
         
         val d = new Descriptor(tid, Thread.currentThread, idx)
         descs(idx) = d
@@ -173,7 +252,7 @@ extends ConcurrentMemoryPool[R] {
   def tryRemove(descarray: Array[Descriptor], idx: Int): Boolean = {
     val d = descarray(idx)
     if (d != null && d.thread.getState == Thread.State.TERMINATED) {
-      d.descriptorIndex.release()
+      d.descriptorIndex.releaseDescriptor()
       true
     } else false
   }
@@ -188,6 +267,7 @@ extends ConcurrentMemoryPool[R] {
       if (init ne null) init(obj)
       obj
     } else {
+      d.active.pos = 0
       decBlock(d)
       allocate()
     }
@@ -200,6 +280,7 @@ extends ConcurrentMemoryPool[R] {
       d.activeArray(pos) = f
       d.activePos = pos + 1
     } else {
+      d.active.pos = BLOCKSIZE
       incBlock(d)
       dispose(f)
     }
@@ -212,9 +293,15 @@ extends ConcurrentMemoryPool[R] {
       d.activeArray = d.active.array
       d.activePos = d.active.pos
     } else {
+      // release any block two levels below top
+      val twobelow = getNext(d.active)
+      if (twobelow ne null) {
+        d.active.next = null
+        emptypool.release(twobelow.##, twobelow)
+      }
+      
       // no previous block => top == active
-      var block = stealBlock(d.tid)
-      if (block eq null) block = allocateFullBlock()
+      val block = fetchFullBlock(d.active.##)
       setNext(block, d.top)
       d.top = block
       d.active = block
@@ -227,7 +314,8 @@ extends ConcurrentMemoryPool[R] {
   def incBlock(d: Descriptor) {
     var block = getNext(d.active)
     if (block eq null) {
-      block = allocateEmptyBlock()
+      block = emptypool.steal(d.active.##)
+      if (block eq null) block = allocateEmptyBlock()
       setNext(d.active, block)
     }
     if (d.active eq d.top) {
@@ -235,7 +323,7 @@ extends ConcurrentMemoryPool[R] {
       d.activeArray = d.active.array
       d.activePos = d.active.pos
     } else {
-      releaseBlock(d.tid, d.top)
+      freepool.release(d.top.##, d.top)
       d.top = d.active
       d.active = block
       d.activeArray = d.active.array
@@ -251,57 +339,17 @@ extends ConcurrentMemoryPool[R] {
     b.next = next
   }
   
-  def stealBlock(tid: Long): Block = {
-    // do one round on the freepool and try to steal
-    var attempts = 2
-    var i = math.abs(tid.toInt) % par
-    while (attempts > 0) {
-      val b = stealAt(i)
-      if (b ne null) return b
-      i = (i + 1) % par
-      attempts -= 1
-    }
-    
-    null
+  def releaseBlock(hash: Long, b: Block) {
+    if (b.pos == 0) emptypool.release(hash, b)
+    else if (b.pos == BLOCKSIZE) freepool.release(hash, b)
+    else halfpool.release(hash, b)
   }
   
-  def stealAt(pos: Int): Block = {
-    val blockptr = freepool.get(pos)
-    if ((blockptr & INDEX_MASK) == 0) null
-    else {
-      val stamp = blockptr & TIMESTAMP_MASK
-      val nstamp = stamp + TIMESTAMP_GROWTH
-      val idx = blockptr & INDEX_MASK
-      val block = blockarray.get(idx.toInt)
-      val nblock = block.next
-      val nidx = if (nblock eq null) 0L else nblock.idx.toLong & ((1L << 32) - 1)
-      val nblockptr = nstamp | nidx
-      if (freepool.compareAndSet(pos, blockptr, nblockptr)) {
-        block.next = null
-        block
-      } else null
-    }
-  }
-  
-  def releaseBlock(tid: Long, b: Block) {
-    // loop until you manage to return the block
-    var i = math.abs(tid.toInt) % par
-    while (true) {
-      if (releaseAt(i, b)) return
-      i = (i + 1) % par
-    }
-  }
-  
-  def releaseAt(pos: Int, block: Block): Boolean = {
-    val oblockptr = freepool.get(pos)
-    val ostamp = oblockptr & TIMESTAMP_MASK
-    val nstamp = ostamp + TIMESTAMP_GROWTH
-    val oidx = oblockptr & INDEX_MASK
-    val oblock = if (oidx == 0) null else blockarray.get(oidx.toInt)
-    val nidx = block.idx.toLong & ((1L << 32) - 1)
-    val nblockptr = nstamp | nidx
-    block.next = oblock
-    freepool.compareAndSet(pos, oblockptr, nblockptr)
+  def fetchFullBlock(hash: Long) = {
+    var b = freepool.steal(hash)
+    if (b eq null) b = emptypool.steal(hash)
+    if (b eq null) b = allocateFullBlock() else fill(b)
+    b
   }
   
   @tailrec
@@ -366,47 +414,61 @@ extends ConcurrentMemoryPool[R] {
   
   /* debugging */
   
-  def printState() {
-    def length(block: Block) = {
-      var b = block
-      var len = 0
-      while (b ne null) {
-        len += 1
-        b = b.next
-      }
-      len
+  private def lengthBlocks(block: Block) = {
+    var b = block
+    var len = 0
+    while (b ne null) {
+      len += 1
+      b = b.next
     }
-    def ara2Array(ara: AtomicReferenceArray[Block]) = {
-      val a = new Array[Block](ara.length)
-      for (i <- 0 until ara.length) a(i) = ara.get(i)
-      a
+    len
+  }
+  
+  private def printBlocks(block: Block) {
+    var b = block
+    while (b ne null) {
+      print(b.idx)
+      print("[%d]".format(b.pos))
+      print(" -> ")
+      b = b.next
     }
-    def ala2Array(ara: AtomicLongArray) = {
-      val a = new Array[Long](ara.length)
-      for (i <- 0 until ara.length) a(i) = ara.get(i)
-      a
-    }
-    println("CPool")
-    println("-----")
+    println("null")
+  }
+  
+  private def ara2Array(ara: AtomicReferenceArray[Block]) = {
+    val a = new Array[Block](ara.length)
+    for (i <- 0 until ara.length) a(i) = ara.get(i)
+    a
+  }
+  
+  private def ala2Array(ara: AtomicLongArray) = {
+    val a = new Array[Long](ara.length)
+    for (i <- 0 until ara.length) a(i) = ara.get(i)
+    a
+  }
+  
+  def printBlocks() {
     println("Block array: " + (ara2Array(blockarray).zipWithIndex map {
       case (b, i) => if (b eq null) i + ": ___" else i + ": [" + b.idx + "]"
     } mkString(", ")))
     println("Block counter: " + blockcounter.get)
-    val freepooltxt = ala2Array(freepool) map {
-      ptr =>
-      val stamp = (ptr & TIMESTAMP_MASK) >>> TIMESTAMP_OFFSET
-      val idx = ptr & INDEX_MASK
-      "(%d, %s)".format(stamp, idx + " -> elems: " + length(blockarray.get(idx.toInt)))
-    } mkString(", ")
-    println("Freepool: " + freepooltxt)
+  }
+  
+  def printDescriptors() {
     println("Descriptors: ")
     for (d <- descriptors; if d != null) {
-      println("Tid: " + d.tid)
-      println("Top: " + d.top.idx)
-      println("Active: " + d.active.idx)
-      println("Active pos: " + d.activePos)
-      println()
+      d.printOut()
     }
+  }
+  
+  def printState() {
+    println("CPool")
+    println("-----")
+    printBlocks()
+    println("Freepool: " + freepool)
+    println("Emptypool: " + emptypool)
+    println("Halfpool: " + halfpool)
+    printDescriptors()
   }
   
 }

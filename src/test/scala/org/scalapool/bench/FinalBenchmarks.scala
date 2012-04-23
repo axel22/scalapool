@@ -255,82 +255,21 @@ object MultiCPoolHashtable extends MultiMain {
 }
 
 
-object HeapProducerConsumer extends MultiMain {
+abstract class ProducerConsumer extends MultiMain {
   
   class Node {
     @volatile var elem = -1
+    @volatile var data = 0.0
     @volatile var next: Node = null
   }
   
-  class Producer(idx: Int, sz: Int, var channelStart: Node) extends Thread {
-    override def run() {
-      var channel = channelStart
-      channelStart = null
-      
-      var i = 0
-      while (i < sz) {
-        val next = new Node
-        next.elem = i
-        channel.next = next
-        channel = next
-        i += 1
-      }
-    }
-  }
+  def allocate(): Node
   
-  class Consumer(idx: Int, sz: Int, var channelStart: Node) extends Thread {
-    var local: Int = 0
-    
-    override def run() {
-      var channel = channelStart
-      channelStart = null
-      
-      var i = 0
-      while (i < sz) {
-        local = channel.elem
-        assert(i == local + 1)
-        local = math.sqrt(local).toInt // compute a bit
-        while ((channel.next eq null) && (i < sz)) Thread.sleep(0, 1000)
-        channel = channel.next
-        i += 1
-      }
-    }
-  }
+  def dispose(n: Node): Unit
   
-  def run() {
-    val numpairs = par / 2
-    val sz = size / numpairs
-    
-    val pairs = for (index <- 0 until numpairs) yield {
-      val channel = new Node
-      (new Producer(index, sz, channel), new Consumer(index, sz, channel))
-    }
-    
-    pairs.foreach {
-      case (p, c) => 
-        p.start()
-        c.start()
-    }
-    pairs.foreach {
-      case (p, c) =>
-        p.join()
-        c.join()
-    }
-  }
+  def produce(n: Node, i: Int): Unit
   
-}
-
-
-object CPoolProducerConsumer extends MultiMain {
-  
-  val pool = new CPool[Node](par)(new Node)(null)
-  
-  import pool._
-  
-  class Node {
-    @volatile var elem = -1
-    @volatile var next: Node = null
-  }
+  def consume(n: Node, i: Int): Unit
   
   class Producer(idx: Int, sz: Int, var channelStart: Node) extends Thread {
     override def run() {
@@ -340,34 +279,26 @@ object CPoolProducerConsumer extends MultiMain {
       var i = 0
       while (i < sz) {
         val next = allocate()
-        next.elem = i
-        next.next = null
-        
+        produce(next, i)
         channel.next = next
         channel = next
-        
         i += 1
       }
     }
   }
   
   class Consumer(idx: Int, sz: Int, var channelStart: Node) extends Thread {
-    var local: Int = 0
-    
     override def run() {
       var channel = channelStart
       channelStart = null
       
       var i = 0
       while (i < sz) {
-        local = channel.elem
-        assert(i == local + 1)
-        local = math.sqrt(local).toInt // compute a bit
+        consume(channel, i)
         while ((channel.next eq null) && (i < sz)) Thread.sleep(0, 1000)
         
         val old = channel
-        channel = old.next
-        old.next = null
+        channel = channel.next
         dispose(old)
         
         i += 1
@@ -396,17 +327,75 @@ object CPoolProducerConsumer extends MultiMain {
     }
   }
   
-  override def onExit() {
-    printState()
+}
+
+
+trait CheapPC extends ProducerConsumer {
+  
+  def produce(n: Node, i: Int) {
+    n.elem = i
+  }
+  
+  def consume(n: Node, i: Int) {
+    assert(i == n.elem + 1)
+    n.elem = math.sqrt(n.elem).toInt
   }
   
 }
 
 
+abstract class HeapProducerConsumer extends ProducerConsumer {
+  
+  def allocate() = new Node
+  
+  def dispose(n: Node) {}
+  
+}
 
 
+abstract class CPoolProducerConsumer extends ProducerConsumer {
+  
+  val pool = new CPool[Node](par)(new Node)(null)
+  
+  def allocate() = pool.allocate()
+  
+  def dispose(old: Node) {
+    old.next = null
+    pool.dispose(old)
+  }
+  
+  override def onExit() {
+    pool.printState()
+  }
+  
+}
 
 
+object CheapHeapPC extends HeapProducerConsumer with CheapPC
+
+
+object CheapCPoolPC extends CPoolProducerConsumer with CheapPC
+
+
+trait ExpensivePC extends ProducerConsumer {
+  
+  def produce(n: Node, i: Int) {
+    n.elem = math.cos(math.sqrt(i)).toInt
+  }
+  
+  def consume(n: Node, i: Int) {
+    val x = math.sqrt(n.elem)
+    val y = math.sqrt(x)
+    n.elem = math.atan(y).toInt
+  }
+  
+}
+
+
+object ExpensiveHeapPC extends HeapProducerConsumer with ExpensivePC
+
+
+object ExpensiveCPoolPC extends CPoolProducerConsumer with ExpensivePC
 
 
 
