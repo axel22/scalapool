@@ -410,57 +410,6 @@ object HashDescriptors extends MultiMain {
 }
 
 
-object HashDescriptorsBurst extends MultiMain {
-  
-  val burst = System.getProperty("burst").toInt
-  val pool = new CPool[Foo](par)(new Foo)({
-    x =>
-  })
-  
-  
-  import pool._
-  
-  class StackThread(index: Int, sz: Int) extends Thread {
-    override def run() {
-      var i = 0
-      val burstarray = new Array[Foo](burst)
-      while (i < sz) {
-        var j = 0
-        while (j < burst) {
-          val foo = allocate()
-          foo.x = 1
-          burstarray(j) = foo
-          j += 1
-        }
-        
-        j = 0
-        while (j < burst) {
-          val foo = burstarray(j)
-          dispose(foo)
-          j += 1
-        }
-        
-        i += burst
-      }
-    }
-  }
-  
-  def run() {
-    val sz = size / par
-    
-    val threads = for (index <- 0 until par) yield new StackThread(index, sz)
-    
-    threads.foreach(_.start())
-    threads.foreach(_.join())
-  }
-  
-  override def onExit() {
-    printState()
-  }
-  
-}
-
-
 final class CPoolProto[T <: AnyRef: Manifest](val par: Int)(ctor: =>T)(init: T => Unit) {
   
   import java.util.concurrent.atomic._

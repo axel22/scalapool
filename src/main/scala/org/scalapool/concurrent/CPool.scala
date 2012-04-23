@@ -324,7 +324,7 @@ extends ConcurrentMemoryPool[R] {
       } while (blkcnt <= idx && !blockcounter.compareAndSet(blkcnt, idx + 1))
     } else {
       // find next free entry
-      while (barr.get(idx) != null && idx < barr.length) idx += 1
+      while (idx < barr.length && barr.get(idx) != null) idx += 1
       allocblock(b, idx)
     }
   }
@@ -367,6 +367,15 @@ extends ConcurrentMemoryPool[R] {
   /* debugging */
   
   def printState() {
+    def length(block: Block) = {
+      var b = block
+      var len = 0
+      while (b ne null) {
+        len += 1
+        b = b.next
+      }
+      len
+    }
     def ara2Array(ara: AtomicReferenceArray[Block]) = {
       val a = new Array[Block](ara.length)
       for (i <- 0 until ara.length) a(i) = ara.get(i)
@@ -387,7 +396,7 @@ extends ConcurrentMemoryPool[R] {
       ptr =>
       val stamp = (ptr & TIMESTAMP_MASK) >>> TIMESTAMP_OFFSET
       val idx = ptr & INDEX_MASK
-      "(%d, %d)".format(stamp, idx)
+      "(%d, %s)".format(stamp, idx + " -> elems: " + length(blockarray.get(idx.toInt)))
     } mkString(", ")
     println("Freepool: " + freepooltxt)
     println("Descriptors: ")

@@ -55,7 +55,7 @@ abstract class MultiMain extends MultiConfig {
 }
 
 
-object MultiHeap extends MultiMain {
+object MultiHeapAllocation extends MultiMain {
   
   class HeapThread(sz: Int) extends Thread {
     var f: Foo = null
