@@ -73,6 +73,11 @@ object Allocator {
     def threadLocalPool[Repr >: Null <: AnyRef: ClassManifest](memoryPoolFactory: =>MemoryPool[Repr]) = {
       new ThreadLocalPool(() => memoryPoolFactory)
     }
+    
+    def cpool[Repr >: Null <: AnyRef: Manifest](par: Int, useCleaner: Boolean = true)(ctor: =>Repr)(init: Repr => Unit) = {
+      val mempool = new CPool[Repr](par, useCleaner)(ctor)(init)
+      mempool
+    }
   }
   
 }
