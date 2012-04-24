@@ -263,7 +263,9 @@ extends ConcurrentMemoryPool[R] {
     if (pos > 0) {
       pos -= 1
       d.activePos = pos
-      val obj = d.activeArray(pos)
+      val array = d.activeArray
+      val obj = array(pos)
+      //array(pos) = null
       if (init ne null) init(obj)
       obj
     } else {
@@ -294,9 +296,11 @@ extends ConcurrentMemoryPool[R] {
       d.activePos = d.active.pos
     } else {
       // release any block two levels below top
+      //printDescriptors()
       val twobelow = getNext(d.active)
       if (twobelow ne null) {
         d.active.next = null
+        //assert(twobelow.array.forall(_ == null), (twobelow.pos, twobelow.array.mkString(", ")))
         emptypool.release(twobelow.##, twobelow)
       }
       
@@ -340,15 +344,19 @@ extends ConcurrentMemoryPool[R] {
   }
   
   def releaseBlock(hash: Long, b: Block) {
-    if (b.pos == 0) emptypool.release(hash, b)
-    else if (b.pos == BLOCKSIZE) freepool.release(hash, b)
+    if (b.pos == 0) {
+      //assert(b.array.forall(_ == null), (b.pos, b.array.mkString(", ")))
+      emptypool.release(hash, b)
+    } else if (b.pos == BLOCKSIZE) freepool.release(hash, b)
     else halfpool.release(hash, b)
   }
   
   def fetchFullBlock(hash: Long) = {
     var b = freepool.steal(hash)
-    if (b eq null) b = emptypool.steal(hash)
-    if (b eq null) b = allocateFullBlock() else fill(b)
+    if (b eq null) {
+      b = emptypool.steal(hash)
+      if (b eq null) b = allocateFullBlock() else fill(b)
+    }
     b
   }
   
@@ -400,19 +408,29 @@ extends ConcurrentMemoryPool[R] {
     b
   }
   
-  def halfFill(b: Block) {
-    val array = b.array
-    for (i <- 0 until (BLOCKSIZE / 2)) array(i) = ctor
-    b.pos = BLOCKSIZE / 2
-  }
-  
   def fill(b: Block) {
     val array = b.array
+    //assert(array.forall(_ == null), (b.pos, array.mkString(", ")))
     for (i <- 0 until BLOCKSIZE) array(i) = ctor
+    counter.addAndGet(BLOCKSIZE)
     b.pos = BLOCKSIZE
   }
   
   /* debugging */
+  
+  val counter = new java.util.concurrent.atomic.AtomicInteger(0)
+  
+  def printState() {
+    println("CPool")
+    println("-----")
+    println("Total allocations: " + counter.get())
+    //printBlockArray()
+    printBlockArraySize()
+    println("Freepool: " + freepool)
+    println("Emptypool: " + emptypool)
+    println("Halfpool: " + halfpool)
+    printDescriptors()
+  }
   
   private def lengthBlocks(block: Block) = {
     var b = block
@@ -447,7 +465,12 @@ extends ConcurrentMemoryPool[R] {
     a
   }
   
-  def printBlocks() {
+  def printBlockArraySize() {
+    println("Block array size: " + blockarray.length)
+    println("Block counter: " + blockcounter.get)
+  }
+  
+  def printBlockArray() {
     println("Block array: " + (ara2Array(blockarray).zipWithIndex map {
       case (b, i) => if (b eq null) i + ": ___" else i + ": [" + b.idx + "]"
     } mkString(", ")))
@@ -459,16 +482,6 @@ extends ConcurrentMemoryPool[R] {
     for (d <- descriptors; if d != null) {
       d.printOut()
     }
-  }
-  
-  def printState() {
-    println("CPool")
-    println("-----")
-    printBlocks()
-    println("Freepool: " + freepool)
-    println("Emptypool: " + emptypool)
-    println("Halfpool: " + halfpool)
-    printDescriptors()
   }
   
 }

@@ -295,7 +295,7 @@ abstract class ProducerConsumer extends MultiMain {
       var i = 0
       while (i < sz) {
         consume(channel, i)
-        while ((channel.next eq null) && (i < sz)) Thread.sleep(0, 1000)
+        while ((channel.next eq null) && (i < sz)) Thread.sleep(0, 200)
         
         val old = channel
         channel = channel.next
