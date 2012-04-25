@@ -293,7 +293,7 @@ abstract class ProducerConsumer extends MultiMain {
       var i = 0
       while (i < sz) {
         consume(channel, i)
-        while ((channel.next eq null) && (i < sz)) Thread.sleep(0, 200)
+        while ((channel.next eq null) && (i < sz)) Thread.`yield` // Thread.sleep(0, 200)
         
         val old = channel
         channel = channel.next
@@ -394,6 +394,190 @@ object ExpensiveHeapPC extends HeapProducerConsumer with ExpensivePC
 
 
 object ExpensiveCPoolPC extends CPoolProducerConsumer with ExpensivePC
+
+
+abstract class BinaryTree extends MultiMain {
+self =>
+  
+  def allocate(): Node
+  
+  def dispose(n: Node): Unit
+  
+  trait Tree {
+    def insert(x: Int): Tree
+    def remove(x: Int): Tree
+    def balanceFactor: Int
+    def depth: Int
+    def stringRep: String
+    def dispose(): Unit
+    
+    def asNode = this.asInstanceOf[Node]
+    def isNode = false
+    override def toString = toString(0)
+    def toString(lev: Int) = " " * lev + stringRep
+  }
+  
+  case object Empty extends Tree {
+    def insert(x: Int) = {
+      val n = allocate()
+      n.elem = x
+      n.depth = 1
+      assert(n.left == Empty && n.right == Empty, n)
+      n
+    }
+    def remove(x: Int) = this
+    def balanceFactor = 0
+    def depth = 0
+    def stringRep = "Empty\n"
+    def dispose() {}
+  }
+  
+  class Node extends Tree {
+    var elem: Int = 0
+    var depth: Int = 0
+    @volatile var left: Tree = Empty
+    @volatile var right: Tree = Empty
+    
+    override def isNode = true
+    
+    def insert(x: Int): Tree = {
+      if (x == elem) this
+      else if (x < elem) {
+        left = left.insert(x)
+        updateDepth()
+        balance()
+      } else {
+        right = right.insert(x)
+        updateDepth()
+        balance()
+      }
+    }
+    
+    def balanceFactor = left.depth - right.depth
+    
+    def balance(): Node = {
+      val bf = left.depth - right.depth
+      if (bf >= -1 && bf <= 1) this
+      else if (bf == -2) {
+        if (right.balanceFactor == +1) right = right.asNode.rotateRight()
+        rotateLeft()
+      } else if (bf == +2) {
+        if (right.balanceFactor == -1) left = left.asNode.rotateLeft()
+        rotateRight()
+      } else sys.error("not possible")
+    }
+    
+    def rotateLeft(): Node = {
+      val root = right.asNode
+      this.right = root.right
+      root.left = this
+      this.updateDepth()
+      root.updateDepth()
+      root
+    }
+    
+    def rotateRight(): Node = {
+      val root = left.asNode
+      this.left = root.right
+      root.right = this
+      this.updateDepth()
+      root.updateDepth()
+      root
+    }
+    
+    def updateDepth() {
+      depth = math.max(left.depth, right.depth) + 1
+    }
+    
+    def remove(x: Int): Tree = {
+      // TODO
+      Empty
+    }
+    
+    def dispose() {
+      left.dispose()
+      right.dispose()
+      
+      this.left = Empty
+      this.right = Empty
+      self.dispose(this)
+    }
+    
+    def stringRep = "Node(%d, %d)\n".format(elem, depth)
+    
+    override def toString(lev: Int) = " " * lev + stringRep + left.toString(lev + 1) + right.toString(lev + 1)
+    
+  }
+  
+  class Inserter(val idx: Int, val sz: Int, val repeats: Int) extends Thread {
+    override def run() {
+      def elem(i: Int, off: Int) = i * 2 + off
+      var tree: Tree = Empty
+      
+      for (round <- 0 until repeats) {
+        // fill
+        var i = 0
+        while (i < sz) {
+          val ins = elem(i, 0)
+          tree = tree.insert(ins)
+          i += 1
+        }
+        
+        // dispose
+        tree.dispose()
+        
+        tree = Empty
+      }
+    }
+  }
+  
+  def run() {
+    val work = size
+    val repeats = 1024 / par
+    
+    val threads = for (index <- 0 until par) yield new Inserter(index, work, repeats)
+    
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+  }
+  
+}
+
+
+object HeapBinaryTree extends BinaryTree {
+  
+  def allocate() = new Node
+  
+  def dispose(n: Node) {}
+  
+}
+
+
+object CPoolBinaryTree extends BinaryTree {
+
+  val pool = new CPool[Node](par)(new Node)(null)
+  
+  def allocate() = pool.allocate()
+  
+  def dispose(old: Node) {
+    pool.dispose(old)
+  }
+  
+  override def onExit() {
+    pool.printState()
+  }
+  
+}
+
+
+
+
+
+
+
+
+
+
 
 
 
