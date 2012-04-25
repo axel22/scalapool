@@ -56,7 +56,7 @@ object MultiHeapBurst extends MultiMain {
 object MultiCPoolBurst extends MultiMain {
   
   val burst = System.getProperty("burst").toInt
-  val pool = new CPool[Foo](par)(new Foo)(null)
+  val pool = new CPool[Foo](par, true)(new Foo)(null)
   
   import pool._
   
@@ -130,7 +130,7 @@ object MultiHeap extends MultiMain {
 
 object MultiCPool extends MultiMain {
   
-  val pool = new CPool[Foo](par)(new Foo)(null)
+  val pool = new CPool[Foo](par, true)(new Foo)(null)
   
   import pool._
   
@@ -422,7 +422,6 @@ self =>
       val n = allocate()
       n.elem = x
       n.depth = 1
-      assert(n.left == Empty && n.right == Empty, n)
       n
     }
     def remove(x: Int) = this
@@ -469,7 +468,7 @@ self =>
     
     def rotateLeft(): Node = {
       val root = right.asNode
-      this.right = root.right
+      this.right = root.left
       root.left = this
       this.updateDepth()
       root.updateDepth()
@@ -495,12 +494,15 @@ self =>
     }
     
     def dispose() {
-      left.dispose()
-      right.dispose()
+      val left = this.left
+      val right = this.right
       
       this.left = Empty
       this.right = Empty
       self.dispose(this)
+      
+      left.dispose()
+      right.dispose()
     }
     
     def stringRep = "Node(%d, %d)\n".format(elem, depth)
@@ -554,7 +556,7 @@ object HeapBinaryTree extends BinaryTree {
 
 
 object CPoolBinaryTree extends BinaryTree {
-
+  
   val pool = new CPool[Node](par)(new Node)(null)
   
   def allocate() = pool.allocate()
