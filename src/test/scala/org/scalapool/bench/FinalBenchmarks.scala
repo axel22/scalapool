@@ -172,7 +172,6 @@ object MultiHeapHashtable extends MultiMain {
     val table = new Array[Foo](1000001)
     override def run() {
       var i = 0
-      val burstarray = new Array[Foo](burst)
       while (i < sz) {
         var j = 0
         while (j < burst) {
@@ -184,7 +183,7 @@ object MultiHeapHashtable extends MultiMain {
         
         j = 0
         while (j < burst) {
-          val foo = table((i + j) % table.length)
+          val foo = table((i + j * 4096) % table.length)
           table((i + j * 4096) % table.length) = null
           j += 1
         }
@@ -338,7 +337,7 @@ trait CheapPC extends ProducerConsumer {
   
   def consume(n: Node, i: Int) {
     assert(i == n.elem + 1)
-    n.elem = math.sqrt(n.elem).toInt
+    n.elem = -n.elem
   }
   
 }
