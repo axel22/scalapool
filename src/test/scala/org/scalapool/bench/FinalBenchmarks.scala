@@ -58,7 +58,6 @@ object MultiCPoolBurst extends MultiMain {
   val burst = System.getProperty("burst").toInt
   val pool = new CPool[Foo](par)(new Foo)(null)
   
-  
   import pool._
   
   class StackThread(index: Int, sz: Int) extends Thread {
